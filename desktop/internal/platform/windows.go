@@ -88,22 +88,36 @@ func PlaySound() {
 	}()
 }
 
-// ShowNotification shows a Windows toast notification using PowerShell.
-func ShowNotification(title, message string) {
-	script := `
-Add-Type -AssemblyName System.Windows.Forms
-$notify = New-Object System.Windows.Forms.NotifyIcon
-$notify.Icon = [System.Drawing.SystemIcons]::Information
-$notify.BalloonTipTitle = '` + title + `'
-$notify.BalloonTipText = '` + message + `'
-$notify.Visible = $true
-$notify.ShowBalloonTip(5000)
-Start-Sleep -Milliseconds 5500
-$notify.Dispose()
-`
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	go cmd.Run()
+// SetWindowOpacity sets the opacity of a window by its title using Win32 API.
+// opacity should be between 0.0 (transparent) and 1.0 (opaque).
+func SetWindowOpacity(title string, opacity float64) {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	findWindow := user32.NewProc("FindWindowW")
+	getWindowLong := user32.NewProc("GetWindowLongW")
+	setWindowLong := user32.NewProc("SetWindowLongW")
+	setLayeredAttrs := user32.NewProc("SetLayeredWindowAttributes")
+
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
+	hwnd, _, _ := findWindow.Call(0, uintptr(unsafe.Pointer(titlePtr)))
+	if hwnd == 0 {
+		return
+	}
+
+	// GWL_EXSTYLE = -20 → 0xFFFFFFEC as uint32
+	var nExStyle int32 = -20
+	const wsExLayered = 0x00080000
+	const lwaAlpha = 0x02
+
+	// Add WS_EX_LAYERED style
+	style, _, _ := getWindowLong.Call(hwnd, uintptr(nExStyle))
+	setWindowLong.Call(hwnd, uintptr(nExStyle), style|wsExLayered)
+
+	// Set alpha (0-255)
+	alpha := byte(opacity * 255)
+	if alpha < 76 { // minimum ~30%
+		alpha = 76
+	}
+	setLayeredAttrs.Call(hwnd, 0, uintptr(alpha), lwaAlpha)
 }
 
 // ForceForegroundWindow brings the overlay window to focus using Windows API.

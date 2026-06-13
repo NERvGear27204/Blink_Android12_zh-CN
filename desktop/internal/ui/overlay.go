@@ -62,11 +62,14 @@ func ShowOverlay(app fyne.App, cfg *config.Settings) {
 
 	w.Show()
 
-	// Force focus to this window so ESC works immediately
+	// Force focus + apply window opacity so ESC works immediately
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		w.RequestFocus()
 		platform.ForceForegroundWindow()
+		if cfg.Opacity < 1.0 {
+			platform.SetWindowOpacity("Blink - Rest", cfg.Opacity)
+		}
 	}()
 
 	// Animation ticker

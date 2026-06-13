@@ -231,7 +231,10 @@ func (mw *MainWindow) onRestStart() {
 	mode := mw.cfg.AlertMode
 	// Show notification (for "notification" or "both" mode)
 	if mode == "notification" || mode == "both" {
-		platform.ShowNotification("👁 Rest Your Eyes!", "Look at something 20 feet away for 20 seconds")
+		mw.app.SendNotification(&fyne.Notification{
+			Title:   "Rest Your Eyes!",
+			Content: "Look at something 20 feet away for 20 seconds",
+		})
 	}
 	// Show overlay (for "overlay" or "both" mode)
 	if mode == "overlay" || mode == "both" {
