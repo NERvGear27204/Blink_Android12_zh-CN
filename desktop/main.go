@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/driver/desktop"
@@ -19,6 +22,16 @@ func main() {
 	a.SetIcon(iconRes)
 
 	cfg := config.Load()
+
+	// Check if launched with --minimized (e.g. from Windows startup)
+	startMinimized := cfg.StartMinimized
+	for _, arg := range os.Args[1:] {
+		if strings.TrimLeft(arg, "-") == "minimized" {
+			startMinimized = true
+			break
+		}
+	}
+
 	mw := ui.NewMainWindow(a, cfg)
 
 	// System tray
@@ -44,8 +57,8 @@ func main() {
 		desk.SetSystemTrayMenu(menu)
 	}
 
-	if cfg.StartMinimized {
-		// Window stays hidden
+	if startMinimized {
+		// Window stays hidden, runs in tray
 	} else {
 		mw.Show()
 	}

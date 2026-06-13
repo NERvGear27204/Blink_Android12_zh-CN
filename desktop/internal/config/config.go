@@ -10,10 +10,12 @@ import (
 type Settings struct {
 	WorkDuration   time.Duration `json:"work_duration_ns"`
 	RestDuration   time.Duration `json:"rest_duration_ns"`
-	OverlayStyle   string        `json:"overlay_style"` // expressive, calm, minimal
+	OverlayStyle   string        `json:"overlay_style"`   // expressive, calm, minimal
+	AlertMode      string        `json:"alert_mode"`      // both, overlay, notification
 	Opacity        float64       `json:"opacity"`
 	SoundEnabled   bool          `json:"sound_enabled"`
-	AutoStart      bool          `json:"auto_start"`
+	AutoStart      bool          `json:"auto_start"`       // start timer on app launch
+	AutoStartBoot  bool          `json:"auto_start_boot"`  // start app on Windows boot
 	StartMinimized bool          `json:"start_minimized"`
 }
 
@@ -22,9 +24,11 @@ func Default() *Settings {
 		WorkDuration:   20 * time.Minute,
 		RestDuration:   20 * time.Second,
 		OverlayStyle:   "expressive",
+		AlertMode:      "both",
 		Opacity:        0.90,
 		SoundEnabled:   true,
 		AutoStart:      false,
+		AutoStartBoot:  false,
 		StartMinimized: false,
 	}
 }
@@ -52,6 +56,9 @@ func Load() *Settings {
 	}
 	if s.Opacity > 1.0 {
 		s.Opacity = 1.0
+	}
+	if s.AlertMode == "" {
+		s.AlertMode = "both"
 	}
 	return s
 }

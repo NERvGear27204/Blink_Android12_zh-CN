@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/character-flat/Blink/desktop/internal/config"
+	"github.com/character-flat/Blink/desktop/internal/platform"
 )
 
 var overlayWindow fyne.Window
@@ -29,63 +30,44 @@ func ShowOverlay(app fyne.App, cfg *config.Settings) {
 
 	startTime := time.Now()
 	restDuration := cfg.RestDuration
+	style := cfg.OverlayStyle
 
-	// UI elements
-	eyeTxt := canvas.NewText("👁", color.White)
-	eyeTxt.TextSize = 56
-	eyeTxt.Alignment = fyne.TextAlignCenter
-
-	titleTxt := canvas.NewText("Look Away", color.White)
-	titleTxt.TextSize = 32
-	titleTxt.TextStyle = fyne.TextStyle{Bold: true}
-	titleTxt.Alignment = fyne.TextAlignCenter
-
-	descTxt := canvas.NewText("20 feet away for 20 seconds", colorSubtext)
-	descTxt.TextSize = 14
-	descTxt.Alignment = fyne.TextAlignCenter
-
+	// Common text elements
 	countTxt := canvas.NewText(fmt.Sprintf("%d", cfg.RestSeconds()), colorAccent)
-	countTxt.TextSize = 48
 	countTxt.TextStyle = fyne.TextStyle{Bold: true}
 	countTxt.Alignment = fyne.TextAlignCenter
 
-	hintTxt := canvas.NewText("Press ESC to dismiss", color.NRGBA{R: 80, G: 80, B: 80, A: 255})
-	hintTxt.TextSize = 11
-	hintTxt.Alignment = fyne.TextAlignCenter
+	var ring fyne.CanvasObject
+	var content *fyne.Container
 
-	// Progress ring
-	ring := NewOverlayRing()
+	switch style {
+	case "calm":
+		content, ring, countTxt = buildCalmOverlay(cfg, countTxt)
+	case "minimal":
+		content, ring, countTxt = buildMinimalOverlay(cfg, countTxt)
+	default: // expressive
+		content, ring, countTxt = buildExpressiveOverlay(cfg, countTxt)
+	}
 
-	centerContent := container.NewVBox(
-		eyeTxt,
-		titleTxt,
-		descTxt,
-		layout.NewSpacer(),
-		countTxt,
-	)
-
-	ringStack := container.NewStack(
-		ring,
-		container.NewCenter(centerContent),
-	)
-
-	content := container.NewVBox(
-		layout.NewSpacer(),
-		container.NewCenter(ringStack),
-		layout.NewSpacer(),
-		container.NewCenter(hintTxt),
-		widget.NewSeparator(),
-	)
-
-	bg := canvas.NewRectangle(color.NRGBA{R: 10, G: 10, B: 18, A: 240})
+	// Background
+	bg := canvas.NewRectangle(color.NRGBA{R: 10, G: 10, B: 18, A: 245})
 	w.SetContent(container.NewStack(bg, container.NewPadded(content)))
 
-	// ESC to dismiss
+	// ESC to dismiss + force focus
 	w.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
 		if ev.Name == fyne.KeyEscape {
 			DismissOverlay()
 		}
 	})
+
+	w.Show()
+
+	// Force focus to this window so ESC works immediately
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		w.RequestFocus()
+		platform.ForceForegroundWindow()
+	}()
 
 	// Animation ticker
 	go func() {
@@ -105,8 +87,17 @@ func ShowOverlay(app fyne.App, cfg *config.Settings) {
 
 			countTxt.Text = fmt.Sprintf("%d", sec)
 			countTxt.Refresh()
-			ring.Progress = float32(progress)
-			ring.Refresh()
+
+			if r, ok := ring.(*OverlayRing); ok {
+				r.Progress = float32(progress)
+				r.Refresh()
+			} else if r, ok := ring.(*CalmRing); ok {
+				r.Progress = float32(progress)
+				r.Refresh()
+			} else if r, ok := ring.(*MinimalRing); ok {
+				r.Progress = float32(progress)
+				r.Refresh()
+			}
 
 			if remaining <= 0 {
 				DismissOverlay()
@@ -114,8 +105,6 @@ func ShowOverlay(app fyne.App, cfg *config.Settings) {
 			}
 		}
 	}()
-
-	w.Show()
 }
 
 func DismissOverlay() {
@@ -125,7 +114,154 @@ func DismissOverlay() {
 	}
 }
 
-// --- Overlay Ring ---
+// ── Expressive style: segmented ring, orbital dots, ripple feel ──
+
+func buildExpressiveOverlay(cfg *config.Settings, countTxt *canvas.Text) (*fyne.Container, fyne.CanvasObject, *canvas.Text) {
+	countTxt.TextSize = 76
+	countTxt.Color = color.White
+
+	secLabel := canvas.NewText("SECONDS", color.NRGBA{R: 100, G: 200, B: 180, A: 180})
+	secLabel.TextSize = 12
+	secLabel.Alignment = fyne.TextAlignCenter
+
+	titleTxt := canvas.NewText("Rest Your Eyes", color.White)
+	titleTxt.TextSize = 28
+	titleTxt.TextStyle = fyne.TextStyle{Bold: true}
+	titleTxt.Alignment = fyne.TextAlignCenter
+
+	descTxt := canvas.NewText("Look at something 20 feet away\nand breathe slowly", colorSubtext)
+	descTxt.TextSize = 14
+	descTxt.Alignment = fyne.TextAlignCenter
+
+	badge := canvas.NewText("blink", color.NRGBA{R: 100, G: 200, B: 180, A: 200})
+	badge.TextSize = 12
+	badge.Alignment = fyne.TextAlignCenter
+
+	hintTxt := canvas.NewText("Press ESC to dismiss", color.NRGBA{R: 60, G: 60, B: 70, A: 255})
+	hintTxt.TextSize = 11
+	hintTxt.Alignment = fyne.TextAlignCenter
+
+	ring := NewOverlayRing()
+
+	centerContent := container.NewVBox(
+		countTxt,
+		secLabel,
+		layout.NewSpacer(),
+		titleTxt,
+		descTxt,
+		layout.NewSpacer(),
+		badge,
+	)
+
+	ringStack := container.NewStack(
+		ring,
+		container.NewCenter(centerContent),
+	)
+
+	content := container.NewVBox(
+		layout.NewSpacer(),
+		container.NewCenter(ringStack),
+		layout.NewSpacer(),
+		container.NewCenter(hintTxt),
+		widget.NewSeparator(),
+	)
+
+	return content, ring, countTxt
+}
+
+// ── Calm style: smooth single arc, gentle glow, light font ──
+
+func buildCalmOverlay(cfg *config.Settings, countTxt *canvas.Text) (*fyne.Container, fyne.CanvasObject, *canvas.Text) {
+	countTxt.TextSize = 72
+	countTxt.Color = color.White
+
+	secLabel := canvas.NewText("seconds", color.NRGBA{R: 74, G: 111, B: 255, A: 180})
+	secLabel.TextSize = 13
+	secLabel.Alignment = fyne.TextAlignCenter
+
+	titleTxt := canvas.NewText("Rest Your Eyes", color.White)
+	titleTxt.TextSize = 26
+	titleTxt.TextStyle = fyne.TextStyle{Bold: true}
+	titleTxt.Alignment = fyne.TextAlignCenter
+
+	descTxt := canvas.NewText("Look 20 feet away and breathe", colorSubtext)
+	descTxt.TextSize = 14
+	descTxt.Alignment = fyne.TextAlignCenter
+
+	hintTxt := canvas.NewText("Press ESC to dismiss", color.NRGBA{R: 60, G: 60, B: 70, A: 255})
+	hintTxt.TextSize = 11
+	hintTxt.Alignment = fyne.TextAlignCenter
+
+	ring := NewCalmRing()
+
+	centerContent := container.NewVBox(
+		countTxt,
+		secLabel,
+		layout.NewSpacer(),
+		titleTxt,
+		descTxt,
+	)
+
+	ringStack := container.NewStack(
+		ring,
+		container.NewCenter(centerContent),
+	)
+
+	content := container.NewVBox(
+		layout.NewSpacer(),
+		container.NewCenter(ringStack),
+		layout.NewSpacer(),
+		container.NewCenter(hintTxt),
+		widget.NewSeparator(),
+	)
+
+	return content, ring, countTxt
+}
+
+// ── Minimal style: just a thin progress circle + big number ──
+
+func buildMinimalOverlay(cfg *config.Settings, countTxt *canvas.Text) (*fyne.Container, fyne.CanvasObject, *canvas.Text) {
+	countTxt.TextSize = 96
+	countTxt.Color = color.White
+
+	secLabel := canvas.NewText("sec", color.NRGBA{R: 74, G: 111, B: 255, A: 180})
+	secLabel.TextSize = 14
+	secLabel.Alignment = fyne.TextAlignCenter
+
+	titleTxt := canvas.NewText("Rest your eyes", color.NRGBA{R: 200, G: 200, B: 210, A: 140})
+	titleTxt.TextSize = 18
+	titleTxt.Alignment = fyne.TextAlignCenter
+
+	hintTxt := canvas.NewText("Press ESC to dismiss", color.NRGBA{R: 60, G: 60, B: 70, A: 255})
+	hintTxt.TextSize = 11
+	hintTxt.Alignment = fyne.TextAlignCenter
+
+	ring := NewMinimalRing()
+
+	centerContent := container.NewVBox(
+		countTxt,
+		secLabel,
+		layout.NewSpacer(),
+		titleTxt,
+	)
+
+	ringStack := container.NewStack(
+		ring,
+		container.NewCenter(centerContent),
+	)
+
+	content := container.NewVBox(
+		layout.NewSpacer(),
+		container.NewCenter(ringStack),
+		layout.NewSpacer(),
+		container.NewCenter(hintTxt),
+		widget.NewSeparator(),
+	)
+
+	return content, ring, countTxt
+}
+
+// ── Expressive Ring (60 segments with gradient) ──
 
 type OverlayRing struct {
 	widget.BaseWidget
@@ -138,17 +274,13 @@ func NewOverlayRing() *OverlayRing {
 	return r
 }
 
-func (r *OverlayRing) MinSize() fyne.Size {
-	return fyne.NewSize(300, 300)
-}
+func (r *OverlayRing) MinSize() fyne.Size { return fyne.NewSize(300, 300) }
 
 func (r *OverlayRing) CreateRenderer() fyne.WidgetRenderer {
 	return &overlayRingRenderer{ring: r}
 }
 
-type overlayRingRenderer struct {
-	ring *OverlayRing
-}
+type overlayRingRenderer struct{ ring *OverlayRing }
 
 func (rr *overlayRingRenderer) Layout(size fyne.Size)  {}
 func (rr *overlayRingRenderer) MinSize() fyne.Size     { return fyne.NewSize(300, 300) }
@@ -182,14 +314,160 @@ func (rr *overlayRingRenderer) Objects() []fyne.CanvasObject {
 		x2 := float32(cx + outerR*math.Cos(rad))
 		y2 := float32(cy + outerR*math.Sin(rad))
 
+		// Gradient from accent to teal across segments
+		t := float64(i) / float64(totalSegments)
 		var segColor color.Color
 		if i < filledSegments {
-			segColor = colorAccent
+			segColor = lerpColor(colorAccent, colorTeal, t)
 		} else {
-			segColor = colorInactive
+			segColor = color.NRGBA{R: 20, G: 20, B: 30, A: 50}
 		}
 
 		line := canvas.NewLine(segColor)
+		line.StrokeWidth = 5
+		line.Position1 = fyne.NewPos(x1, y1)
+		line.Position2 = fyne.NewPos(x2, y2)
+		objects = append(objects, line)
+	}
+
+	return objects
+}
+
+// ── Calm Ring (smooth continuous arc) ──
+
+type CalmRing struct {
+	widget.BaseWidget
+	Progress float32
+}
+
+func NewCalmRing() *CalmRing {
+	r := &CalmRing{Progress: 1.0}
+	r.ExtendBaseWidget(r)
+	return r
+}
+
+func (r *CalmRing) MinSize() fyne.Size { return fyne.NewSize(280, 280) }
+
+func (r *CalmRing) CreateRenderer() fyne.WidgetRenderer {
+	return &calmRingRenderer{ring: r}
+}
+
+type calmRingRenderer struct{ ring *CalmRing }
+
+func (rr *calmRingRenderer) Layout(size fyne.Size)  {}
+func (rr *calmRingRenderer) MinSize() fyne.Size     { return fyne.NewSize(280, 280) }
+func (rr *calmRingRenderer) Refresh()               {}
+func (rr *calmRingRenderer) Destroy()               {}
+func (rr *calmRingRenderer) Objects() []fyne.CanvasObject {
+	size := rr.ring.Size()
+	if size.Width < 10 || size.Height < 10 {
+		size = fyne.NewSize(280, 280)
+	}
+
+	cx := float64(size.Width) / 2
+	cy := float64(size.Height) / 2
+	radius := math.Min(cx, cy) - 15
+
+	objects := make([]fyne.CanvasObject, 0, 200)
+
+	// Background circle (faint)
+	bgSegments := 120
+	for i := 0; i < bgSegments; i++ {
+		angle := float64(i) * (360.0 / float64(bgSegments))
+		rad := angle * math.Pi / 180
+		x1 := float32(cx + (radius-1)*math.Cos(rad))
+		y1 := float32(cy + (radius-1)*math.Sin(rad))
+		x2 := float32(cx + (radius+1)*math.Cos(rad))
+		y2 := float32(cy + (radius+1)*math.Sin(rad))
+		line := canvas.NewLine(color.NRGBA{R: 40, G: 40, B: 70, A: 80})
+		line.StrokeWidth = 6
+		line.Position1 = fyne.NewPos(x1, y1)
+		line.Position2 = fyne.NewPos(x2, y2)
+		objects = append(objects, line)
+	}
+
+	// Progress arc (smooth, thick)
+	progressSegments := int(float64(bgSegments) * float64(rr.ring.Progress))
+	for i := 0; i < progressSegments; i++ {
+		angle := -90.0 + float64(i)*(360.0/float64(bgSegments))
+		rad := angle * math.Pi / 180
+		x1 := float32(cx + (radius-2)*math.Cos(rad))
+		y1 := float32(cy + (radius-2)*math.Sin(rad))
+		x2 := float32(cx + (radius+2)*math.Cos(rad))
+		y2 := float32(cy + (radius+2)*math.Sin(rad))
+		line := canvas.NewLine(colorAccent)
+		line.StrokeWidth = 6
+		line.Position1 = fyne.NewPos(x1, y1)
+		line.Position2 = fyne.NewPos(x2, y2)
+		objects = append(objects, line)
+	}
+
+	return objects
+}
+
+// ── Minimal Ring (thin clean circle) ──
+
+type MinimalRing struct {
+	widget.BaseWidget
+	Progress float32
+}
+
+func NewMinimalRing() *MinimalRing {
+	r := &MinimalRing{Progress: 1.0}
+	r.ExtendBaseWidget(r)
+	return r
+}
+
+func (r *MinimalRing) MinSize() fyne.Size { return fyne.NewSize(320, 320) }
+
+func (r *MinimalRing) CreateRenderer() fyne.WidgetRenderer {
+	return &minimalRingRenderer{ring: r}
+}
+
+type minimalRingRenderer struct{ ring *MinimalRing }
+
+func (rr *minimalRingRenderer) Layout(size fyne.Size)  {}
+func (rr *minimalRingRenderer) MinSize() fyne.Size     { return fyne.NewSize(320, 320) }
+func (rr *minimalRingRenderer) Refresh()               {}
+func (rr *minimalRingRenderer) Destroy()               {}
+func (rr *minimalRingRenderer) Objects() []fyne.CanvasObject {
+	size := rr.ring.Size()
+	if size.Width < 10 || size.Height < 10 {
+		size = fyne.NewSize(320, 320)
+	}
+
+	cx := float64(size.Width) / 2
+	cy := float64(size.Height) / 2
+	radius := math.Min(cx, cy) - 20
+
+	objects := make([]fyne.CanvasObject, 0, 200)
+
+	// Background track
+	segments := 180
+	for i := 0; i < segments; i++ {
+		angle := float64(i) * (360.0 / float64(segments))
+		rad := angle * math.Pi / 180
+		x1 := float32(cx + (radius-1)*math.Cos(rad))
+		y1 := float32(cy + (radius-1)*math.Sin(rad))
+		x2 := float32(cx + (radius+1)*math.Cos(rad))
+		y2 := float32(cy + (radius+1)*math.Sin(rad))
+		line := canvas.NewLine(color.NRGBA{R: 30, G: 30, B: 50, A: 60})
+		line.StrokeWidth = 4
+		line.Position1 = fyne.NewPos(x1, y1)
+		line.Position2 = fyne.NewPos(x2, y2)
+		objects = append(objects, line)
+	}
+
+	// Progress
+	progressSegments := int(float64(segments) * float64(rr.ring.Progress))
+	for i := 0; i < progressSegments; i++ {
+		angle := -90.0 + float64(i)*(360.0/float64(segments))
+		rad := angle * math.Pi / 180
+		x1 := float32(cx + (radius-1)*math.Cos(rad))
+		y1 := float32(cy + (radius-1)*math.Sin(rad))
+		x2 := float32(cx + (radius+1)*math.Cos(rad))
+		y2 := float32(cy + (radius+1)*math.Sin(rad))
+		line := canvas.NewLine(colorAccent)
 		line.StrokeWidth = 4
 		line.Position1 = fyne.NewPos(x1, y1)
 		line.Position2 = fyne.NewPos(x2, y2)
@@ -198,3 +476,15 @@ func (rr *overlayRingRenderer) Objects() []fyne.CanvasObject {
 
 	return objects
 }
+
+// Helper: lerp between two colors
+func lerpColor(a, b color.NRGBA, t float64) color.NRGBA {
+	return color.NRGBA{
+		R: uint8(float64(a.R) + t*(float64(b.R)-float64(a.R))),
+		G: uint8(float64(a.G) + t*(float64(b.G)-float64(a.G))),
+		B: uint8(float64(a.B) + t*(float64(b.B)-float64(a.B))),
+		A: uint8(float64(a.A) + t*(float64(b.A)-float64(a.A))),
+	}
+}
+
+var colorTeal = color.NRGBA{R: 100, G: 200, B: 180, A: 255}

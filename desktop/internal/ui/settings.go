@@ -10,11 +10,12 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/character-flat/Blink/desktop/internal/config"
+	"github.com/character-flat/Blink/desktop/internal/platform"
 )
 
 func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 	w := app.NewWindow("Blink - Settings")
-	w.Resize(fyne.NewSize(400, 480))
+	w.Resize(fyne.NewSize(420, 560))
 	w.SetFixedSize(true)
 
 	// Work duration
@@ -35,6 +36,10 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 		restLabel.SetText(fmt.Sprintf("Rest Duration: %d sec", int(v)))
 	}
 
+	// Alert mode
+	alertModeSelect := widget.NewSelect([]string{"both", "overlay", "notification"}, nil)
+	alertModeSelect.SetSelected(cfg.AlertMode)
+
 	// Overlay style
 	styleSelect := widget.NewSelect([]string{"expressive", "calm", "minimal"}, nil)
 	styleSelect.SetSelected(cfg.OverlayStyle)
@@ -52,8 +57,11 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 	soundCheck := widget.NewCheck("Play sound on rest", nil)
 	soundCheck.Checked = cfg.SoundEnabled
 
-	autoStartCheck := widget.NewCheck("Start timer on launch", nil)
+	autoStartCheck := widget.NewCheck("Start timer on app launch", nil)
 	autoStartCheck.Checked = cfg.AutoStart
+
+	autoBootCheck := widget.NewCheck("Start Blink on Windows boot", nil)
+	autoBootCheck.Checked = cfg.AutoStartBoot
 
 	minimizedCheck := widget.NewCheck("Start minimized to tray", nil)
 	minimizedCheck.Checked = cfg.StartMinimized
@@ -62,12 +70,18 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 	saveBtn := widget.NewButton("Save", func() {
 		cfg.WorkDuration = time.Duration(int(workSlider.Value)) * time.Minute
 		cfg.RestDuration = time.Duration(int(restSlider.Value)) * time.Second
+		cfg.AlertMode = alertModeSelect.Selected
 		cfg.OverlayStyle = styleSelect.Selected
 		cfg.Opacity = opacitySlider.Value / 100.0
 		cfg.SoundEnabled = soundCheck.Checked
 		cfg.AutoStart = autoStartCheck.Checked
+		cfg.AutoStartBoot = autoBootCheck.Checked
 		cfg.StartMinimized = minimizedCheck.Checked
 		_ = cfg.Save()
+
+		// Register/unregister startup
+		_ = platform.SetAutoStartBoot(cfg.AutoStartBoot)
+
 		if onSave != nil {
 			onSave()
 		}
@@ -83,6 +97,10 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 		restLabel,
 		restSlider,
 		layout.NewSpacer(),
+		widget.NewLabel("🔔  Alert Mode"),
+		widget.NewSeparator(),
+		alertModeSelect,
+		layout.NewSpacer(),
 		widget.NewLabel("🎨  Overlay"),
 		widget.NewSeparator(),
 		widget.NewLabel("Style"),
@@ -94,6 +112,7 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 		widget.NewSeparator(),
 		soundCheck,
 		autoStartCheck,
+		autoBootCheck,
 		minimizedCheck,
 		layout.NewSpacer(),
 		container.NewCenter(saveBtn),

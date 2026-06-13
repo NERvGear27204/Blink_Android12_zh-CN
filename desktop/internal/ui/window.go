@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/character-flat/Blink/desktop/internal/config"
+	"github.com/character-flat/Blink/desktop/internal/platform"
 	"github.com/character-flat/Blink/desktop/internal/timer"
 )
 
@@ -227,11 +228,26 @@ func (mw *MainWindow) onStateChange(s timer.State) {
 }
 
 func (mw *MainWindow) onRestStart() {
-	ShowOverlay(mw.app, mw.cfg)
+	mode := mw.cfg.AlertMode
+	// Show notification (for "notification" or "both" mode)
+	if mode == "notification" || mode == "both" {
+		platform.ShowNotification("👁 Rest Your Eyes!", "Look at something 20 feet away for 20 seconds")
+	}
+	// Show overlay (for "overlay" or "both" mode)
+	if mode == "overlay" || mode == "both" {
+		ShowOverlay(mw.app, mw.cfg)
+	}
+	// Play sound
+	if mw.cfg.SoundEnabled {
+		platform.PlaySound()
+	}
 }
 
 func (mw *MainWindow) onRestEnd() {
 	DismissOverlay()
+	if mw.cfg.SoundEnabled {
+		platform.PlaySound()
+	}
 }
 
 func (mw *MainWindow) openSettings() {
