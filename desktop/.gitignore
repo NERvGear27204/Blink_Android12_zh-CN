@@ -1,0 +1,5 @@
+# Build output
+*.exe
+
+# Go
+vendor/

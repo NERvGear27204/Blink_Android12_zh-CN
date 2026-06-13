@@ -54,18 +54,29 @@ When it's time, a beautiful fullscreen **overlay** appears on top of whatever yo
 
 **[→ Latest Release](https://github.com/character-flat/Blink/releases/latest)**
 
+### Android
 | Build | Size | Description |
 |---|---|---|
 | `blink-v1.1.0-release.apk` | ~1.8 MB | Signed, R8-minified release build |
 | `blink-v1.1.0-debug.apk` | ~10 MB | Debug build with logging |
 
+### Windows (Desktop)
+| Build | Size | Description |
+|---|---|---|
+| `blink-desktop-windows-amd64.exe` | ~24 MB | Single binary, no installer needed |
+
+See [desktop/README.md](desktop/README.md) for the desktop-specific docs.
+
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-### Requirements
+### Requirements (Android)
 - Android 14+ (API 34)
 - **Display over other apps** permission (for the overlay)
 - Notification permission
 - Exact alarm permission
+
+### Requirements (Desktop)
+- Windows 10+ (64-bit)
 
 ---
 
