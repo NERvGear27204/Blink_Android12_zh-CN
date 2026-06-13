@@ -15,8 +15,17 @@ import (
 
 func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 	w := app.NewWindow("Blink - Settings")
-	w.Resize(fyne.NewSize(420, 560))
+	w.Resize(fyne.NewSize(420, 520))
 	w.SetFixedSize(true)
+
+	// Auto-save helper — saves config and notifies caller on every change
+	save := func() {
+		_ = cfg.Save()
+		_ = platform.SetAutoStartBoot(cfg.AutoStartBoot)
+		if onSave != nil {
+			onSave()
+		}
+	}
 
 	// Work duration
 	workLabel := widget.NewLabel(fmt.Sprintf("Work Duration: %d min", cfg.WorkMinutes()))
@@ -25,6 +34,8 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 	workSlider.Step = 1
 	workSlider.OnChanged = func(v float64) {
 		workLabel.SetText(fmt.Sprintf("Work Duration: %d min", int(v)))
+		cfg.WorkDuration = time.Duration(int(v)) * time.Minute
+		save()
 	}
 
 	// Rest duration
@@ -34,14 +45,22 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 	restSlider.Step = 1
 	restSlider.OnChanged = func(v float64) {
 		restLabel.SetText(fmt.Sprintf("Rest Duration: %d sec", int(v)))
+		cfg.RestDuration = time.Duration(int(v)) * time.Second
+		save()
 	}
 
 	// Alert mode
-	alertModeSelect := widget.NewSelect([]string{"both", "overlay", "notification"}, nil)
+	alertModeSelect := widget.NewSelect([]string{"both", "overlay", "notification"}, func(v string) {
+		cfg.AlertMode = v
+		save()
+	})
 	alertModeSelect.SetSelected(cfg.AlertMode)
 
 	// Overlay style
-	styleSelect := widget.NewSelect([]string{"expressive", "calm", "minimal"}, nil)
+	styleSelect := widget.NewSelect([]string{"expressive", "calm", "minimal"}, func(v string) {
+		cfg.OverlayStyle = v
+		save()
+	})
 	styleSelect.SetSelected(cfg.OverlayStyle)
 
 	// Opacity
@@ -51,43 +70,34 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 	opacitySlider.Step = 5
 	opacitySlider.OnChanged = func(v float64) {
 		opacityLabel.SetText(fmt.Sprintf("Overlay Opacity: %d%%", int(v)))
+		cfg.Opacity = v / 100.0
+		save()
 	}
 
 	// Options
-	soundCheck := widget.NewCheck("Play sound on rest", nil)
+	soundCheck := widget.NewCheck("Play sound on rest", func(v bool) {
+		cfg.SoundEnabled = v
+		save()
+	})
 	soundCheck.Checked = cfg.SoundEnabled
 
-	autoStartCheck := widget.NewCheck("Start timer on app launch", nil)
+	autoStartCheck := widget.NewCheck("Start timer on app launch", func(v bool) {
+		cfg.AutoStart = v
+		save()
+	})
 	autoStartCheck.Checked = cfg.AutoStart
 
-	autoBootCheck := widget.NewCheck("Start Blink on Windows boot", nil)
+	autoBootCheck := widget.NewCheck("Start Blink on Windows boot", func(v bool) {
+		cfg.AutoStartBoot = v
+		save()
+	})
 	autoBootCheck.Checked = cfg.AutoStartBoot
 
-	minimizedCheck := widget.NewCheck("Start minimized to tray", nil)
-	minimizedCheck.Checked = cfg.StartMinimized
-
-	// Save
-	saveBtn := widget.NewButton("Save", func() {
-		cfg.WorkDuration = time.Duration(int(workSlider.Value)) * time.Minute
-		cfg.RestDuration = time.Duration(int(restSlider.Value)) * time.Second
-		cfg.AlertMode = alertModeSelect.Selected
-		cfg.OverlayStyle = styleSelect.Selected
-		cfg.Opacity = opacitySlider.Value / 100.0
-		cfg.SoundEnabled = soundCheck.Checked
-		cfg.AutoStart = autoStartCheck.Checked
-		cfg.AutoStartBoot = autoBootCheck.Checked
-		cfg.StartMinimized = minimizedCheck.Checked
-		_ = cfg.Save()
-
-		// Register/unregister startup
-		_ = platform.SetAutoStartBoot(cfg.AutoStartBoot)
-
-		if onSave != nil {
-			onSave()
-		}
-		w.Close()
+	minimizedCheck := widget.NewCheck("Start minimized to tray", func(v bool) {
+		cfg.StartMinimized = v
+		save()
 	})
-	saveBtn.Importance = widget.HighImportance
+	minimizedCheck.Checked = cfg.StartMinimized
 
 	content := container.NewVBox(
 		widget.NewLabel("⏱  Timers"),
@@ -114,10 +124,9 @@ func ShowSettings(app fyne.App, cfg *config.Settings, onSave func()) {
 		autoStartCheck,
 		autoBootCheck,
 		minimizedCheck,
-		layout.NewSpacer(),
-		container.NewCenter(saveBtn),
 	)
 
-	w.SetContent(container.NewPadded(content))
+	scrollable := container.NewVScroll(container.NewPadded(content))
+	w.SetContent(scrollable)
 	w.Show()
 }

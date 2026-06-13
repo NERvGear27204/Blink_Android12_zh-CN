@@ -10,10 +10,18 @@ import (
 
 	"github.com/character-flat/Blink/desktop/assets"
 	"github.com/character-flat/Blink/desktop/internal/config"
+	"github.com/character-flat/Blink/desktop/internal/platform"
 	"github.com/character-flat/Blink/desktop/internal/ui"
 )
 
 func main() {
+	// Prevent multiple instances
+	if !platform.AcquireSingleInstance() {
+		// Another instance is already running — exit silently
+		return
+	}
+	defer platform.ReleaseSingleInstance()
+
 	a := app.NewWithID("com.cflat.blink-desktop")
 	a.Settings().SetTheme(&blinkTheme{})
 
