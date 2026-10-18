@@ -46,7 +46,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cflat.blink.service.EyeCareService
 import com.cflat.blink.ui.theme.BlinkTheme
 import com.cflat.blink.util.PrefsManager
-import com.cflat.blink.util.ShizukuUtils
 
 class MainActivity : ComponentActivity() {
 
@@ -69,7 +68,6 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
         checkExactAlarmPermission()
         checkOverlayPermission()
-        ShizukuUtils.initialize()
 
         registerReceiver(
             exactAlarmReceiver,
@@ -105,7 +103,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(exactAlarmReceiver)
-        ShizukuUtils.cleanup()
     }
 
     private fun requestNotificationPermission() {

@@ -12,6 +12,8 @@ object PrefsManager {
     private const val KEY_OVERLAY_DISMISSABLE = "overlay_dismissable"
     private const val KEY_OVERLAY_OPACITY = "overlay_opacity"  // 0.4..1.0
     private const val KEY_OVERLAY_STYLE = "overlay_style"      // "expressive" | "calm" | "minimal"
+    private const val KEY_OVERLAY_THEME_MODE = "overlay_theme_mode" // "system" | "dark" | "light"
+    private const val KEY_OVERLAY_APP_WHITELIST = "overlay_app_whitelist"
 
     private const val DEFAULT_WORK_DURATION_MS = 20 * 60 * 1000L
     private const val DEFAULT_REST_DURATION_MS = 20 * 1000L
@@ -60,4 +62,16 @@ object PrefsManager {
 
     fun setOverlayStyle(context: Context, style: String) =
         prefs(context).edit().putString(KEY_OVERLAY_STYLE, style).apply()
+
+    fun getOverlayThemeMode(context: Context): String =
+        prefs(context).getString(KEY_OVERLAY_THEME_MODE, "system") ?: "system"
+
+    fun setOverlayThemeMode(context: Context, mode: String) =
+        prefs(context).edit().putString(KEY_OVERLAY_THEME_MODE, mode).apply()
+
+    fun getOverlayAppWhitelist(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_OVERLAY_APP_WHITELIST, emptySet())?.toSet() ?: emptySet()
+
+    fun setOverlayAppWhitelist(context: Context, packages: Set<String>) =
+        prefs(context).edit().putStringSet(KEY_OVERLAY_APP_WHITELIST, packages).apply()
 }

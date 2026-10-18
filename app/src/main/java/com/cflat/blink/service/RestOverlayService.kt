@@ -51,6 +51,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import android.content.res.Configuration
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.cflat.blink.ui.theme.BlinkTheme
 import com.cflat.blink.util.PrefsManager
 
@@ -106,6 +107,7 @@ class RestOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, V
             val opacity = PrefsManager.getOverlayOpacity(this)
             val dismissable = PrefsManager.isOverlayDismissable(this)
             val style = PrefsManager.getOverlayStyle(this)
+            val themeMode = PrefsManager.getOverlayThemeMode(this)
 
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -135,7 +137,12 @@ class RestOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, V
                 setViewTreeSavedStateRegistryOwner(this@RestOverlayService)
                 setViewTreeViewModelStoreOwner(this@RestOverlayService)
                 setContent {
-                    BlinkTheme {
+                    val useDarkTheme = when (themeMode) {
+                        "dark" -> true
+                        "light" -> false
+                        else -> isSystemInDarkTheme()
+                    }
+                    BlinkTheme(darkTheme = useDarkTheme) {
                         RestOverlayContent(
                             totalMs = restDurationMs,
                             dismissable = dismissable,

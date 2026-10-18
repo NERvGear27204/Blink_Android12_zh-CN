@@ -16,6 +16,7 @@ import com.cflat.blink.EyeCareApp
 import com.cflat.blink.R
 import com.cflat.blink.receiver.AlarmReceiver
 import com.cflat.blink.ui.MainActivity
+import com.cflat.blink.util.ForegroundAppUtils
 import com.cflat.blink.util.PrefsManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -328,7 +329,11 @@ class EyeCareService : Service() {
             showAlertNotification()
         }
         if (alertMode != "notification" && android.provider.Settings.canDrawOverlays(this)) {
-            RestOverlayService.start(this)
+            if (shouldSkipOverlayForWhitelistedApp()) {
+                Log.d(TAG, "Skipping overlay because foreground app is whitelisted")
+            } else {
+                RestOverlayService.start(this)
+            }
         }
 
         updateNotification("🧘 Resting... (${restDurationMs / 1000}s)")
@@ -392,5 +397,15 @@ class EyeCareService : Service() {
         val minutes = totalSeconds / 60
         val seconds = totalSeconds % 60
         return String.format("%02d:%02d remaining", minutes, seconds)
+    }
+
+    private fun shouldSkipOverlayForWhitelistedApp(): Boolean {
+        val whitelist = PrefsManager.getOverlayAppWhitelist(this)
+        if (whitelist.isEmpty()) return false
+
+        val foregroundPackage = ForegroundAppUtils.getForegroundPackage(this) ?: return false
+        if (foregroundPackage == packageName) return false
+
+        return whitelist.contains(foregroundPackage)
     }
 }

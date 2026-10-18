@@ -9,6 +9,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.cflat.blink.service.RestOverlayContent
 import com.cflat.blink.ui.theme.BlinkTheme
 import com.cflat.blink.util.PrefsManager
@@ -50,9 +51,15 @@ class RestActivity : ComponentActivity() {
         val restDurationMs = PrefsManager.getRestDurationMs(this)
         val dismissable = PrefsManager.isOverlayDismissable(this)
         val style = PrefsManager.getOverlayStyle(this)
+        val themeMode = PrefsManager.getOverlayThemeMode(this)
 
         setContent {
-            BlinkTheme {
+            val useDarkTheme = when (themeMode) {
+                "dark" -> true
+                "light" -> false
+                else -> isSystemInDarkTheme()
+            }
+            BlinkTheme(darkTheme = useDarkTheme) {
                 RestOverlayContent(
                     totalMs = restDurationMs,
                     dismissable = dismissable,

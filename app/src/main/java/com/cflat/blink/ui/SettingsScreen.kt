@@ -41,6 +41,14 @@ fun SettingsScreen(
     var overlayDismissable by remember { mutableStateOf(PrefsManager.isOverlayDismissable(context)) }
     var overlayOpacity by remember { mutableFloatStateOf(PrefsManager.getOverlayOpacity(context)) }
     var overlayStyle by remember { mutableStateOf(PrefsManager.getOverlayStyle(context)) }
+    var overlayThemeMode by remember { mutableStateOf(PrefsManager.getOverlayThemeMode(context)) }
+    var overlayWhitelistText by remember {
+        mutableStateOf(
+            PrefsManager.getOverlayAppWhitelist(context)
+                .sorted()
+                .joinToString(separator = "\n")
+        )
+    }
     var autoStart by remember { mutableStateOf(PrefsManager.isAutoStartEnabled(context)) }
 
     Scaffold(
@@ -220,6 +228,82 @@ fun SettingsScreen(
                                 label = { Text(label, style = MaterialTheme.typography.labelMedium) }
                             )
                         }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Overlay Theme",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Choose light, dark, or follow system theme",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        listOf(
+                            "system" to "System",
+                            "dark" to "Dark",
+                            "light" to "Light"
+                        ).forEachIndexed { index, (key, label) ->
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index, 3),
+                                onClick = {
+                                    overlayThemeMode = key
+                                    PrefsManager.setOverlayThemeMode(context, key)
+                                },
+                                selected = overlayThemeMode == key,
+                                label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Skip Overlay in Apps",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Enter package names (one per line). Blink skips full-screen overlay when these apps are foreground.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = overlayWhitelistText,
+                        onValueChange = {
+                            overlayWhitelistText = it
+                            PrefsManager.setOverlayAppWhitelist(context, parsePackageList(it))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 6,
+                        placeholder = { Text("com.google.android.youtube") }
+                    )
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(AndroidSettings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text("Grant usage access")
                     }
                 }
             }
@@ -532,3 +616,10 @@ private fun getOemBatteryGuide(): OemBatteryGuide? {
         else -> null
     }
 }
+
+private fun parsePackageList(value: String): Set<String> =
+    value
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .toSet()
