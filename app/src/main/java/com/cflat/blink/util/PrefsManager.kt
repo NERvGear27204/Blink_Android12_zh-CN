@@ -8,12 +8,14 @@ object PrefsManager {
     private const val KEY_AUTO_START = "auto_start_on_boot"
     private const val KEY_WORK_DURATION_MS = "work_duration_ms"
     private const val KEY_REST_DURATION_MS = "rest_duration_ms"
-    private const val KEY_ALERT_MODE = "alert_mode"            // "both" | "overlay" | "notification"
+    private const val KEY_ALERT_MODE = "alert_mode"            // "both" | "overlay" | "overlay_media" | "notification"
     private const val KEY_OVERLAY_DISMISSABLE = "overlay_dismissable"
     private const val KEY_OVERLAY_OPACITY = "overlay_opacity"  // 0.4..1.0
     private const val KEY_OVERLAY_STYLE = "overlay_style"      // "expressive" | "calm" | "minimal"
     private const val KEY_OVERLAY_THEME_MODE = "overlay_theme_mode" // "system" | "dark" | "light"
     private const val KEY_OVERLAY_APP_WHITELIST = "overlay_app_whitelist"
+    private const val KEY_OVERLAY_DISMISS_BUTTON_STYLE = "overlay_dismiss_button_style" // "icon" | "icon_text" | "text"
+    private const val KEY_SHIZUKU_MODE = "shizuku_mode"
 
     private const val DEFAULT_WORK_DURATION_MS = 20 * 60 * 1000L
     private const val DEFAULT_REST_DURATION_MS = 20 * 1000L
@@ -74,4 +76,16 @@ object PrefsManager {
 
     fun setOverlayAppWhitelist(context: Context, packages: Set<String>) =
         prefs(context).edit().putStringSet(KEY_OVERLAY_APP_WHITELIST, packages).apply()
+
+    fun getOverlayDismissButtonStyle(context: Context): String =
+        prefs(context).getString(KEY_OVERLAY_DISMISS_BUTTON_STYLE, "icon") ?: "icon"
+
+    fun setOverlayDismissButtonStyle(context: Context, style: String) =
+        prefs(context).edit().putString(KEY_OVERLAY_DISMISS_BUTTON_STYLE, style).apply()
+
+    fun isShizukuModeEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SHIZUKU_MODE, false)
+
+    fun setShizukuModeEnabled(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean(KEY_SHIZUKU_MODE, enabled).apply()
 }

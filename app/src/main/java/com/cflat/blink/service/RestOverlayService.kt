@@ -1,6 +1,10 @@
 package com.cflat.blink.service
 
+import android.content.Context.AUDIO_SERVICE
 import android.app.Service
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
@@ -59,9 +63,15 @@ class RestOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, V
 
     companion object {
         private const val TAG = "RestOverlayService"
-        fun start(context: Context) {
+        private const val EXTRA_PAUSE_MEDIA = "pause_media"
+
+        fun start(context: Context, pauseMedia: Boolean = false) {
             Log.d(TAG, "start() called")
-            context.startService(Intent(context, RestOverlayService::class.java))
+            context.startService(
+                Intent(context, RestOverlayService::class.java).apply {
+                    putExtra(EXTRA_PAUSE_MEDIA, pauseMedia)
+                }
+            )
         }
     }
 
@@ -86,7 +96,7 @@ class RestOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, V
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand - showing overlay")
-        showOverlay()
+        showOverlay(intent)
         return START_NOT_STICKY
     }
 
@@ -100,7 +110,7 @@ class RestOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, V
         super.onDestroy()
     }
 
-    private fun showOverlay() {
+    private fun showOverlay(intent: Intent?) {
         try {
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
@@ -108,6 +118,8 @@ class RestOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, V
             val dismissable = PrefsManager.isOverlayDismissable(this)
             val style = PrefsManager.getOverlayStyle(this)
             val themeMode = PrefsManager.getOverlayThemeMode(this)
+            val dismissButtonStyle = PrefsManager.getOverlayDismissButtonStyle(this)
+            val pauseMedia = intent?.getBooleanExtra(EXTRA_PAUSE_MEDIA, false) == true
 
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -147,6 +159,8 @@ class RestOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, V
                             totalMs = restDurationMs,
                             dismissable = dismissable,
                             style = style,
+                            dismissButtonStyle = dismissButtonStyle,
+                            pauseMedia = pauseMedia,
                             onDismiss = { dismissAndStop() }
                         )
                     }
@@ -196,10 +210,50 @@ fun RestOverlayContent(
     totalMs: Long,
     dismissable: Boolean = false,
     style: String = "expressive",
+    dismissButtonStyle: String = "icon",
+    pauseMedia: Boolean = false,
     onDismiss: () -> Unit
 ) {
     var remainingMs by remember { mutableLongStateOf(totalMs) }
     val context = LocalContext.current
+    val audioManager = remember { context.getSystemService(AUDIO_SERVICE) as? AudioManager }
+    var focusRequest by remember { mutableStateOf<AudioFocusRequest?>(null) }
+
+    DisposableEffect(pauseMedia) {
+        if (pauseMedia) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(false)
+                    .build()
+                focusRequest = request
+                audioManager?.requestAudioFocus(request)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+                )
+            }
+        }
+
+        onDispose {
+            if (pauseMedia) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    focusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+                } else {
+                    @Suppress("DEPRECATION")
+                    audioManager?.abandonAudioFocus(null)
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         vibrateDevice(context, longArrayOf(0, 150, 100, 200))
@@ -280,11 +334,25 @@ fun RestOverlayContent(
                     contentColor = colorScheme.onErrorContainer,
                     shape = CircleShape
                 ) {
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "Dismiss",
-                        modifier = Modifier.size(36.dp)
-                    )
+                    when (dismissButtonStyle) {
+                        "text" -> Text("Dismiss", fontWeight = FontWeight.SemiBold)
+                        "icon_text" -> Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = "Dismiss",
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text("Dismiss", fontWeight = FontWeight.SemiBold)
+                        }
+                        else -> Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Dismiss",
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
             }
         }

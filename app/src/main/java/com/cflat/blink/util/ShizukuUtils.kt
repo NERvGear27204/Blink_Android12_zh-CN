@@ -31,7 +31,7 @@ object ShizukuUtils {
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         Log.d(TAG, "Shizuku binder received")
-        checkPermission()
+        refreshPermissionStatus()
     }
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
@@ -56,7 +56,7 @@ object ShizukuUtils {
         Shizuku.addRequestPermissionResultListener(permissionResultListener)
 
         if (Shizuku.pingBinder()) {
-            checkPermission()
+            refreshPermissionStatus()
         } else {
             _shizukuStatus.value = ShizukuStatus.NOT_RUNNING
         }
@@ -68,19 +68,21 @@ object ShizukuUtils {
         Shizuku.removeRequestPermissionResultListener(permissionResultListener)
     }
 
-    private fun checkPermission() {
+    private fun refreshPermissionStatus() {
         if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
             _shizukuStatus.value = ShizukuStatus.READY
         } else if (Shizuku.shouldShowRequestPermissionRationale()) {
             _shizukuStatus.value = ShizukuStatus.PERMISSION_DENIED
         } else {
-            Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
+            _shizukuStatus.value = ShizukuStatus.PERMISSION_DENIED
         }
     }
 
     fun requestPermission() {
         if (Shizuku.pingBinder()) {
             Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
+        } else {
+            _shizukuStatus.value = ShizukuStatus.NOT_RUNNING
         }
     }
 

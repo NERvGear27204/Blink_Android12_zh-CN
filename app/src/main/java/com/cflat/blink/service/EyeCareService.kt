@@ -304,7 +304,8 @@ class EyeCareService : Service() {
                 val remaining = (timerDurationMs - elapsed).coerceAtLeast(0)
                 _remainingMs.value = remaining
                 // Re-read alertMode every tick so settings changes take effect immediately
-                if (PrefsManager.getAlertMode(this@EyeCareService) != "overlay") {
+                val mode = PrefsManager.getAlertMode(this@EyeCareService)
+                if (mode != "overlay" && mode != "overlay_media") {
                     updateNotification(formatTime(remaining))
                 }
                 if (remaining <= 0) break
@@ -325,14 +326,17 @@ class EyeCareService : Service() {
         stopCountdown()
 
         val alertMode = PrefsManager.getAlertMode(this)
-        if (alertMode != "overlay") {
+        if (alertMode != "overlay" && alertMode != "overlay_media") {
             showAlertNotification()
         }
         if (alertMode != "notification" && android.provider.Settings.canDrawOverlays(this)) {
             if (shouldSkipOverlayForWhitelistedApp()) {
                 Log.d(TAG, "Skipping overlay because foreground app is whitelisted")
             } else {
-                RestOverlayService.start(this)
+                RestOverlayService.start(
+                    this,
+                    pauseMedia = alertMode == "overlay_media"
+                )
             }
         }
 

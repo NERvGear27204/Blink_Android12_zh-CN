@@ -2,10 +2,14 @@ package com.cflat.blink.ui
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings as AndroidSettings
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -18,8 +22,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cflat.blink.util.PrefsManager
+import com.cflat.blink.util.ShizukuUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -42,14 +49,31 @@ fun SettingsScreen(
     var overlayOpacity by remember { mutableFloatStateOf(PrefsManager.getOverlayOpacity(context)) }
     var overlayStyle by remember { mutableStateOf(PrefsManager.getOverlayStyle(context)) }
     var overlayThemeMode by remember { mutableStateOf(PrefsManager.getOverlayThemeMode(context)) }
-    var overlayWhitelistText by remember {
-        mutableStateOf(
-            PrefsManager.getOverlayAppWhitelist(context)
-                .sorted()
-                .joinToString(separator = "\n")
-        )
-    }
+    var overlayWhitelist by remember { mutableStateOf(PrefsManager.getOverlayAppWhitelist(context)) }
+    var dismissButtonStyle by remember { mutableStateOf(PrefsManager.getOverlayDismissButtonStyle(context)) }
+    var showAppPicker by remember { mutableStateOf(false) }
+    var availableApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
+    var appSearch by remember { mutableStateOf("") }
+    var shizukuMode by remember { mutableStateOf(PrefsManager.isShizukuModeEnabled(context)) }
+    var shizukuBusy by remember { mutableStateOf(false) }
+    val shizukuStatus by ShizukuUtils.shizukuStatus.collectAsStateWithLifecycle()
     var autoStart by remember { mutableStateOf(PrefsManager.isAutoStartEnabled(context)) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(showAppPicker) {
+        if (showAppPicker && availableApps.isEmpty()) {
+            availableApps = loadLaunchableApps(context)
+        }
+    }
+
+    DisposableEffect(shizukuMode) {
+        if (shizukuMode) {
+            ShizukuUtils.initialize()
+            onDispose { ShizukuUtils.cleanup() }
+        } else {
+            onDispose { }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -129,19 +153,22 @@ fun SettingsScreen(
                     Spacer(Modifier.height(4.dp))
                     @OptIn(ExperimentalMaterial3Api::class)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        listOf(
+                        val options = listOf(
                             "both" to "Both",
                             "overlay" to "Overlay",
+                            "overlay_media" to "Overlay + Media",
                             "notification" to "Notif"
-                        ).forEachIndexed { index, (key, label) ->
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index, 3),
+                        )
+                        options.forEachIndexed { index, (key, label) ->
+                            UniformSegmentedButton(
+                                modifier = Modifier.weight(1f),
+                                shape = SegmentedButtonDefaults.itemShape(index, options.size),
                                 onClick = {
                                     alertMode = key
                                     PrefsManager.setAlertMode(context, key)
                                 },
                                 selected = alertMode == key,
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                                label = label
                             )
                         }
                     }
@@ -213,19 +240,21 @@ fun SettingsScreen(
                     Spacer(Modifier.height(4.dp))
                     @OptIn(ExperimentalMaterial3Api::class)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        listOf(
+                        val options = listOf(
                             "expressive" to "Expressive",
                             "calm" to "Calm",
                             "minimal" to "Minimal"
-                        ).forEachIndexed { index, (key, label) ->
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index, 3),
+                        )
+                        options.forEachIndexed { index, (key, label) ->
+                            UniformSegmentedButton(
+                                modifier = Modifier.weight(1f),
+                                shape = SegmentedButtonDefaults.itemShape(index, options.size),
                                 onClick = {
                                     overlayStyle = key
                                     PrefsManager.setOverlayStyle(context, key)
                                 },
                                 selected = overlayStyle == key,
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                                label = label
                             )
                         }
                     }
@@ -250,19 +279,21 @@ fun SettingsScreen(
                     Spacer(Modifier.height(4.dp))
                     @OptIn(ExperimentalMaterial3Api::class)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        listOf(
+                        val options = listOf(
                             "system" to "System",
                             "dark" to "Dark",
                             "light" to "Light"
-                        ).forEachIndexed { index, (key, label) ->
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index, 3),
+                        )
+                        options.forEachIndexed { index, (key, label) ->
+                            UniformSegmentedButton(
+                                modifier = Modifier.weight(1f),
+                                shape = SegmentedButtonDefaults.itemShape(index, options.size),
                                 onClick = {
                                     overlayThemeMode = key
                                     PrefsManager.setOverlayThemeMode(context, key)
                                 },
                                 selected = overlayThemeMode == key,
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                                label = label
                             )
                         }
                     }
@@ -280,21 +311,23 @@ fun SettingsScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "Enter package names (one per line). Blink skips full-screen overlay when these apps are foreground.",
+                        "Select apps where Blink should skip full-screen overlay.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    OutlinedTextField(
-                        value = overlayWhitelistText,
-                        onValueChange = {
-                            overlayWhitelistText = it
-                            PrefsManager.setOverlayAppWhitelist(context, parsePackageList(it))
+                    FilledTonalButton(
+                        onClick = { showAppPicker = true },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Select Apps (${overlayWhitelist.size})")
+                    }
+                    TextButton(
+                        onClick = {
+                            overlayWhitelist = emptySet()
+                            PrefsManager.setOverlayAppWhitelist(context, emptySet())
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 6,
-                        placeholder = { Text("com.google.android.youtube") }
-                    )
+                        enabled = overlayWhitelist.isNotEmpty()
+                    ) { Text("Clear Selection") }
                     TextButton(
                         onClick = {
                             val intent = Intent(AndroidSettings.ACTION_USAGE_ACCESS_SETTINGS).apply {
@@ -304,6 +337,108 @@ fun SettingsScreen(
                         }
                     ) {
                         Text("Grant usage access")
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Dismiss Button Style",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Customize dismiss control style on the rest overlay.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        val options = listOf(
+                            "icon" to "Icon",
+                            "icon_text" to "Icon + Text",
+                            "text" to "Text"
+                        )
+                        options.forEachIndexed { index, (key, label) ->
+                            UniformSegmentedButton(
+                                modifier = Modifier.weight(1f),
+                                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                                onClick = {
+                                    dismissButtonStyle = key
+                                    PrefsManager.setOverlayDismissButtonStyle(context, key)
+                                },
+                                selected = dismissButtonStyle == key,
+                                label = label
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Shizuku ───────────────────────────────────────────────
+            SettingsSectionHeader("Shizuku", Icons.Rounded.Security)
+            SettingsCard {
+                ListItem(
+                    headlineContent = { Text("Enable Shizuku Mode", fontWeight = FontWeight.SemiBold) },
+                    supportingContent = { Text("Request and use Shizuku only when enabled") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Rounded.Security,
+                            contentDescription = null,
+                            tint = if (shizukuMode) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = shizukuMode,
+                            onCheckedChange = {
+                                shizukuMode = it
+                                PrefsManager.setShizukuModeEnabled(context, it)
+                            }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                )
+
+                if (shizukuMode) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Status: ${shizukuStatus.toReadableText()}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = { ShizukuUtils.requestPermission() },
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text("Request Permission") }
+                            FilledTonalButton(
+                                onClick = {
+                                    shizukuBusy = true
+                                    scope.launch {
+                                        ShizukuUtils.whitelistFromBatteryOptimization(context)
+                                        delay(400)
+                                        shizukuBusy = false
+                                    }
+                                },
+                                enabled = !shizukuBusy && shizukuStatus == ShizukuUtils.ShizukuStatus.READY,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(if (shizukuBusy) "Applying..." else "Whitelist App")
+                            }
+                        }
                     }
                 }
             }
@@ -318,7 +453,6 @@ fun SettingsScreen(
                 var isIgnoring by remember {
                     mutableStateOf(pm.isIgnoringBatteryOptimizations(context.packageName))
                 }
-                val scope = rememberCoroutineScope()
 
                 ListItem(
                     headlineContent = { Text("Battery Optimization", fontWeight = FontWeight.SemiBold) },
@@ -428,6 +562,22 @@ fun SettingsScreen(
                 }
             }
 
+            if (showAppPicker) {
+                AppWhitelistDialog(
+                    apps = availableApps,
+                    selected = overlayWhitelist,
+                    query = appSearch,
+                    onQueryChange = { appSearch = it },
+                    onToggle = { packageName ->
+                        overlayWhitelist = overlayWhitelist.toMutableSet().apply {
+                            if (contains(packageName)) remove(packageName) else add(packageName)
+                        }
+                        PrefsManager.setOverlayAppWhitelist(context, overlayWhitelist)
+                    },
+                    onDismiss = { showAppPicker = false }
+                )
+            }
+
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -510,6 +660,132 @@ private fun SliderRow(
         )
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UniformSegmentedButton(
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape,
+    onClick: () -> Unit,
+    selected: Boolean,
+    label: String
+) {
+    SegmentedButton(
+        modifier = modifier.heightIn(min = 44.dp),
+        shape = shape,
+        onClick = onClick,
+        selected = selected,
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    )
+}
+
+private data class AppEntry(
+    val packageName: String,
+    val label: String
+)
+
+@Composable
+private fun AppWhitelistDialog(
+    apps: List<AppEntry>,
+    selected: Set<String>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onToggle: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val filtered = remember(apps, query) {
+        val q = query.trim().lowercase()
+        if (q.isBlank()) apps
+        else apps.filter { it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Apps") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    placeholder = { Text("Search app") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 180.dp, max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(filtered, key = { it.packageName }) { app ->
+                        val checked = selected.contains(app.packageName)
+                        ListItem(
+                            modifier = Modifier.clickable { onToggle(app.packageName) },
+                            headlineContent = {
+                                Text(
+                                    app.label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    app.packageName,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            trailingContent = {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { onToggle(app.packageName) }
+                                )
+                            },
+                            colors = ListItemDefaults.colors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        }
+    )
+}
+
+private fun loadLaunchableApps(context: Context): List<AppEntry> {
+    val pm = context.packageManager
+    val intent = Intent(Intent.ACTION_MAIN).apply {
+        addCategory(Intent.CATEGORY_LAUNCHER)
+    }
+    return pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
+        .map {
+            val packageName = it.activityInfo.packageName
+            val label = it.loadLabel(pm)?.toString().orEmpty().ifBlank { packageName }
+            AppEntry(packageName = packageName, label = label)
+        }
+        .distinctBy { it.packageName }
+        .sortedBy { it.label.lowercase() }
+}
+
+private fun ShizukuUtils.ShizukuStatus.toReadableText(): String =
+    when (this) {
+        ShizukuUtils.ShizukuStatus.UNKNOWN -> "Unknown"
+        ShizukuUtils.ShizukuStatus.NOT_INSTALLED -> "Shizuku not installed"
+        ShizukuUtils.ShizukuStatus.NOT_RUNNING -> "Shizuku not running"
+        ShizukuUtils.ShizukuStatus.PERMISSION_DENIED -> "Permission required"
+        ShizukuUtils.ShizukuStatus.READY -> "Ready"
+        ShizukuUtils.ShizukuStatus.WHITELISTED -> "Whitelisted"
+    }
 
 // ── OEM battery guidance ──────────────────────────────────────────────────────
 
@@ -616,10 +892,3 @@ private fun getOemBatteryGuide(): OemBatteryGuide? {
         else -> null
     }
 }
-
-private fun parsePackageList(value: String): Set<String> =
-    value
-        .lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .toSet()
