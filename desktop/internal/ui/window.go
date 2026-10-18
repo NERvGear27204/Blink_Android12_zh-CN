@@ -55,10 +55,20 @@ func NewMainWindow(app fyne.App, cfg *config.Settings) *MainWindow {
 	}
 
 	mw.tmr = timer.New(cfg.WorkDuration, cfg.RestDuration, timer.Callbacks{
-		OnTick:        mw.onTick,
-		OnRestStart:   mw.onRestStart,
-		OnRestEnd:     mw.onRestEnd,
-		OnStateChange: mw.onStateChange,
+		// Timer callbacks run from its worker goroutine. Route every UI update
+		// through Fyne's main runtime to keep the desktop client race-free.
+		OnTick: func(remaining time.Duration, state timer.State) {
+			fyne.Do(func() { mw.onTick(remaining, state) })
+		},
+		OnRestStart: func() {
+			fyne.Do(mw.onRestStart)
+		},
+		OnRestEnd: func() {
+			fyne.Do(mw.onRestEnd)
+		},
+		OnStateChange: func(state timer.State) {
+			fyne.Do(func() { mw.onStateChange(state) })
+		},
 	})
 
 	mw.buildUI()
@@ -289,10 +299,10 @@ type timerRingRenderer struct {
 	ring *TimerRing
 }
 
-func (rr *timerRingRenderer) Layout(size fyne.Size)  {}
-func (rr *timerRingRenderer) MinSize() fyne.Size     { return fyne.NewSize(260, 260) }
-func (rr *timerRingRenderer) Refresh()               {}
-func (rr *timerRingRenderer) Destroy()               {}
+func (rr *timerRingRenderer) Layout(size fyne.Size) {}
+func (rr *timerRingRenderer) MinSize() fyne.Size    { return fyne.NewSize(260, 260) }
+func (rr *timerRingRenderer) Refresh()              {}
+func (rr *timerRingRenderer) Destroy()              {}
 func (rr *timerRingRenderer) Objects() []fyne.CanvasObject {
 	size := rr.ring.Size()
 	if size.Width < 10 || size.Height < 10 {

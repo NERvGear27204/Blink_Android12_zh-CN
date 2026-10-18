@@ -65,11 +65,16 @@ func ShowOverlay(app fyne.App, cfg *config.Settings) {
 	// Force focus + apply window opacity so ESC works immediately
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		w.RequestFocus()
-		platform.ForceForegroundWindow()
-		if cfg.Opacity < 1.0 {
-			platform.SetWindowOpacity("Blink - Rest", cfg.Opacity)
-		}
+		fyne.Do(func() {
+			if overlayWindow != w {
+				return
+			}
+			w.RequestFocus()
+			platform.ForceForegroundWindow()
+			if cfg.Opacity < 1.0 {
+				platform.SetWindowOpacity("Blink - Rest", cfg.Opacity)
+			}
+		})
 	}()
 
 	// Animation ticker
@@ -77,33 +82,41 @@ func ShowOverlay(app fyne.App, cfg *config.Settings) {
 		ticker := time.NewTicker(50 * time.Millisecond)
 		defer ticker.Stop()
 		for range ticker.C {
-			if overlayWindow == nil {
-				return
-			}
 			elapsed := time.Since(startTime)
 			remaining := restDuration - elapsed
 			if remaining < 0 {
 				remaining = 0
 			}
-			sec := int(remaining.Seconds()) + 1
 			progress := float64(remaining) / float64(restDuration)
+			finished := remaining <= 0
 
-			countTxt.Text = fmt.Sprintf("%d", sec)
-			countTxt.Refresh()
+			fyne.Do(func() {
+				if overlayWindow != w {
+					return
+				}
 
-			if r, ok := ring.(*OverlayRing); ok {
-				r.Progress = float32(progress)
-				r.Refresh()
-			} else if r, ok := ring.(*CalmRing); ok {
-				r.Progress = float32(progress)
-				r.Refresh()
-			} else if r, ok := ring.(*MinimalRing); ok {
-				r.Progress = float32(progress)
-				r.Refresh()
-			}
+				sec := int(remaining.Seconds()) + 1
+				countTxt.Text = fmt.Sprintf("%d", sec)
+				countTxt.Refresh()
 
-			if remaining <= 0 {
-				DismissOverlay()
+				switch r := ring.(type) {
+				case *OverlayRing:
+					r.Progress = float32(progress)
+					r.Refresh()
+				case *CalmRing:
+					r.Progress = float32(progress)
+					r.Refresh()
+				case *MinimalRing:
+					r.Progress = float32(progress)
+					r.Refresh()
+				}
+
+				if finished {
+					DismissOverlay()
+				}
+			})
+
+			if finished {
 				return
 			}
 		}
@@ -285,10 +298,10 @@ func (r *OverlayRing) CreateRenderer() fyne.WidgetRenderer {
 
 type overlayRingRenderer struct{ ring *OverlayRing }
 
-func (rr *overlayRingRenderer) Layout(size fyne.Size)  {}
-func (rr *overlayRingRenderer) MinSize() fyne.Size     { return fyne.NewSize(300, 300) }
-func (rr *overlayRingRenderer) Refresh()               {}
-func (rr *overlayRingRenderer) Destroy()               {}
+func (rr *overlayRingRenderer) Layout(size fyne.Size) {}
+func (rr *overlayRingRenderer) MinSize() fyne.Size    { return fyne.NewSize(300, 300) }
+func (rr *overlayRingRenderer) Refresh()              {}
+func (rr *overlayRingRenderer) Destroy()              {}
 func (rr *overlayRingRenderer) Objects() []fyne.CanvasObject {
 	size := rr.ring.Size()
 	if size.Width < 10 || size.Height < 10 {
@@ -357,10 +370,10 @@ func (r *CalmRing) CreateRenderer() fyne.WidgetRenderer {
 
 type calmRingRenderer struct{ ring *CalmRing }
 
-func (rr *calmRingRenderer) Layout(size fyne.Size)  {}
-func (rr *calmRingRenderer) MinSize() fyne.Size     { return fyne.NewSize(280, 280) }
-func (rr *calmRingRenderer) Refresh()               {}
-func (rr *calmRingRenderer) Destroy()               {}
+func (rr *calmRingRenderer) Layout(size fyne.Size) {}
+func (rr *calmRingRenderer) MinSize() fyne.Size    { return fyne.NewSize(280, 280) }
+func (rr *calmRingRenderer) Refresh()              {}
+func (rr *calmRingRenderer) Destroy()              {}
 func (rr *calmRingRenderer) Objects() []fyne.CanvasObject {
 	size := rr.ring.Size()
 	if size.Width < 10 || size.Height < 10 {
@@ -429,10 +442,10 @@ func (r *MinimalRing) CreateRenderer() fyne.WidgetRenderer {
 
 type minimalRingRenderer struct{ ring *MinimalRing }
 
-func (rr *minimalRingRenderer) Layout(size fyne.Size)  {}
-func (rr *minimalRingRenderer) MinSize() fyne.Size     { return fyne.NewSize(320, 320) }
-func (rr *minimalRingRenderer) Refresh()               {}
-func (rr *minimalRingRenderer) Destroy()               {}
+func (rr *minimalRingRenderer) Layout(size fyne.Size) {}
+func (rr *minimalRingRenderer) MinSize() fyne.Size    { return fyne.NewSize(320, 320) }
+func (rr *minimalRingRenderer) Refresh()              {}
+func (rr *minimalRingRenderer) Destroy()              {}
 func (rr *minimalRingRenderer) Objects() []fyne.CanvasObject {
 	size := rr.ring.Size()
 	if size.Width < 10 || size.Height < 10 {
