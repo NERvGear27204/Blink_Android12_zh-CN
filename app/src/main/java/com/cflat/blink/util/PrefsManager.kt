@@ -8,7 +8,8 @@ object PrefsManager {
     private const val KEY_AUTO_START = "auto_start_on_boot"
     private const val KEY_WORK_DURATION_MS = "work_duration_ms"
     private const val KEY_REST_DURATION_MS = "rest_duration_ms"
-    private const val KEY_ALERT_MODE = "alert_mode"            // "both" | "overlay" | "overlay_media" | "notification"
+    private const val KEY_ALERT_MODE = "alert_mode"            // "both" | "overlay" | "notification"
+    private const val KEY_PAUSE_MEDIA_DURING_REST = "pause_media_during_rest"
     private const val KEY_OVERLAY_DISMISSABLE = "overlay_dismissable"
     private const val KEY_OVERLAY_OPACITY = "overlay_opacity"  // 0.4..1.0
     private const val KEY_OVERLAY_STYLE = "overlay_style"      // "expressive" | "calm" | "minimal"
@@ -41,11 +42,31 @@ object PrefsManager {
     fun setRestDurationMs(context: Context, value: Long) =
         prefs(context).edit().putLong(KEY_REST_DURATION_MS, value).apply()
 
-    fun getAlertMode(context: Context): String =
-        prefs(context).getString(KEY_ALERT_MODE, "both") ?: "both"
+    fun getAlertMode(context: Context): String {
+        migrateLegacyAlertMode(context)
+        return prefs(context).getString(KEY_ALERT_MODE, "both") ?: "both"
+    }
 
     fun setAlertMode(context: Context, mode: String) =
         prefs(context).edit().putString(KEY_ALERT_MODE, mode).apply()
+
+    fun isPauseMediaDuringRestEnabled(context: Context): Boolean {
+        migrateLegacyAlertMode(context)
+        return prefs(context).getBoolean(KEY_PAUSE_MEDIA_DURING_REST, false)
+    }
+
+    fun setPauseMediaDuringRestEnabled(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean(KEY_PAUSE_MEDIA_DURING_REST, enabled).apply()
+
+    private fun migrateLegacyAlertMode(context: Context) {
+        val preferences = prefs(context)
+        if (preferences.getString(KEY_ALERT_MODE, "both") == "overlay_media") {
+            preferences.edit()
+                .putString(KEY_ALERT_MODE, "overlay")
+                .putBoolean(KEY_PAUSE_MEDIA_DURING_REST, true)
+                .apply()
+        }
+    }
 
     fun isOverlayDismissable(context: Context): Boolean =
         prefs(context).getBoolean(KEY_OVERLAY_DISMISSABLE, false)

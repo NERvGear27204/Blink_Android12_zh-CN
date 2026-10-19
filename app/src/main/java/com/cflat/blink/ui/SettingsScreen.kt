@@ -3,6 +3,7 @@ package com.cflat.blink.ui
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings as AndroidSettings
@@ -24,11 +25,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cflat.blink.util.ForegroundAppUtils
 import com.cflat.blink.util.PrefsManager
 import com.cflat.blink.util.ShizukuUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +52,9 @@ fun SettingsScreen(
         mutableFloatStateOf(PrefsManager.getRestDurationMs(context) / 1000f)
     }
     var alertMode by remember { mutableStateOf(PrefsManager.getAlertMode(context)) }
+    var pauseMediaDuringRest by remember {
+        mutableStateOf(PrefsManager.isPauseMediaDuringRestEnabled(context))
+    }
     var overlayDismissable by remember { mutableStateOf(PrefsManager.isOverlayDismissable(context)) }
     var overlayOpacity by remember { mutableFloatStateOf(PrefsManager.getOverlayOpacity(context)) }
     var overlayStyle by remember { mutableStateOf(PrefsManager.getOverlayStyle(context)) }
@@ -53,16 +63,39 @@ fun SettingsScreen(
     var dismissButtonStyle by remember { mutableStateOf(PrefsManager.getOverlayDismissButtonStyle(context)) }
     var showAppPicker by remember { mutableStateOf(false) }
     var availableApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
+    var appsLoading by remember { mutableStateOf(false) }
+    var appLoadError by remember { mutableStateOf<String?>(null) }
+    var usageAccessGranted by remember { mutableStateOf(ForegroundAppUtils.hasUsageAccess(context)) }
     var appSearch by remember { mutableStateOf("") }
     var shizukuMode by remember { mutableStateOf(PrefsManager.isShizukuModeEnabled(context)) }
     var shizukuBusy by remember { mutableStateOf(false) }
     val shizukuStatus by ShizukuUtils.shizukuStatus.collectAsStateWithLifecycle()
     var autoStart by remember { mutableStateOf(PrefsManager.isAutoStartEnabled(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                usageAccessGranted = ForegroundAppUtils.hasUsageAccess(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(showAppPicker) {
         if (showAppPicker && availableApps.isEmpty()) {
-            availableApps = loadLaunchableApps(context)
+            appsLoading = true
+            appLoadError = null
+            try {
+                availableApps = withContext(Dispatchers.IO) { loadLaunchableApps(context) }
+            } catch (exception: SecurityException) {
+                Log.e("SettingsScreen", "Unable to query launchable apps", exception)
+                appLoadError = "Blink couldn't load installed apps. Check app visibility permissions."
+            } finally {
+                appsLoading = false
+            }
         }
     }
 
@@ -156,7 +189,6 @@ fun SettingsScreen(
                         val options = listOf(
                             "both" to "Both",
                             "overlay" to "Overlay",
-                            "overlay_media" to "Overlay + Media",
                             "notification" to "Notif"
                         )
                         options.forEachIndexed { index, (key, label) ->
@@ -171,6 +203,33 @@ fun SettingsScreen(
                                 label = label
                             )
                         }
+                    }
+                    if (alertMode != "notification") {
+                        HorizontalDivider()
+                        ListItem(
+                            modifier = Modifier.clickable {
+                                pauseMediaDuringRest = !pauseMediaDuringRest
+                                PrefsManager.setPauseMediaDuringRestEnabled(
+                                    context,
+                                    pauseMediaDuringRest
+                                )
+                            },
+                            headlineContent = {
+                                Text("Pause media during rest", fontWeight = FontWeight.SemiBold)
+                            },
+                            supportingContent = {
+                                Text("Pause currently playing media while the overlay is shown")
+                            },
+                            leadingContent = {
+                                Checkbox(
+                                    checked = pauseMediaDuringRest,
+                                    onCheckedChange = null
+                                )
+                            },
+                            colors = ListItemDefaults.colors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                            )
+                        )
                     }
                 }
             }
@@ -315,6 +374,19 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Text(
+                        if (usageAccessGranted) {
+                            "Usage access is enabled."
+                        } else {
+                            "Usage access is required to detect the current app and skip its overlay."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (usageAccessGranted) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
                     FilledTonalButton(
                         onClick = { showAppPicker = true },
                         shape = RoundedCornerShape(12.dp)
@@ -336,7 +408,7 @@ fun SettingsScreen(
                             context.startActivity(intent)
                         }
                     ) {
-                        Text("Grant usage access")
+                        Text(if (usageAccessGranted) "Manage usage access" else "Grant usage access")
                     }
                 }
 
@@ -565,6 +637,8 @@ fun SettingsScreen(
             if (showAppPicker) {
                 AppWhitelistDialog(
                     apps = availableApps,
+                    isLoading = appsLoading,
+                    loadError = appLoadError,
                     selected = overlayWhitelist,
                     query = appSearch,
                     onQueryChange = { appSearch = it },
@@ -663,7 +737,7 @@ private fun SliderRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UniformSegmentedButton(
+private fun SingleChoiceSegmentedButtonRowScope.UniformSegmentedButton(
     modifier: Modifier = Modifier,
     shape: androidx.compose.ui.graphics.Shape,
     onClick: () -> Unit,
@@ -694,6 +768,8 @@ private data class AppEntry(
 @Composable
 private fun AppWhitelistDialog(
     apps: List<AppEntry>,
+    isLoading: Boolean,
+    loadError: String?,
     selected: Set<String>,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -724,34 +800,61 @@ private fun AppWhitelistDialog(
                         .heightIn(min = 180.dp, max = 420.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(filtered, key = { it.packageName }) { app ->
-                        val checked = selected.contains(app.packageName)
-                        ListItem(
-                            modifier = Modifier.clickable { onToggle(app.packageName) },
-                            headlineContent = {
-                                Text(
-                                    app.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            supportingContent = {
-                                Text(
-                                    app.packageName,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            trailingContent = {
-                                Checkbox(
-                                    checked = checked,
-                                    onCheckedChange = { onToggle(app.packageName) }
-                                )
-                            },
-                            colors = ListItemDefaults.colors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    if (isLoading) {
+                        item {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(24.dp)
                             )
-                        )
+                        }
+                    } else if (loadError != null) {
+                        item {
+                            Text(
+                                loadError,
+                                modifier = Modifier.padding(vertical = 24.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    } else if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                if (apps.isEmpty()) "No launchable apps found"
+                                else "No apps match your search",
+                                modifier = Modifier.padding(vertical = 24.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        items(filtered, key = { it.packageName }) { app ->
+                            val checked = selected.contains(app.packageName)
+                            ListItem(
+                                modifier = Modifier.clickable { onToggle(app.packageName) },
+                                headlineContent = {
+                                    Text(
+                                        app.label,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                supportingContent = {
+                                    Text(
+                                        app.packageName,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                trailingContent = {
+                                    Checkbox(
+                                        checked = checked,
+                                        onCheckedChange = { onToggle(app.packageName) }
+                                    )
+                                },
+                                colors = ListItemDefaults.colors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                                )
+                            )
+                        }
                     }
                 }
             }

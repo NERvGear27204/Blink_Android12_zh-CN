@@ -111,7 +111,7 @@ class EyeCareService : Service() {
         }
 
         when (intent?.action) {
-            ACTION_ALARM_FIRED -> handleAlarmFired()
+            ACTION_ALARM_FIRED -> serviceScope.launch { handleAlarmFired() }
             ACTION_WATCHDOG -> {
                 Log.d(TAG, "Watchdog fired - service is alive, rescheduling")
                 scheduleWatchdog()
@@ -305,7 +305,7 @@ class EyeCareService : Service() {
                 _remainingMs.value = remaining
                 // Re-read alertMode every tick so settings changes take effect immediately
                 val mode = PrefsManager.getAlertMode(this@EyeCareService)
-                if (mode != "overlay" && mode != "overlay_media") {
+                if (mode != "overlay") {
                     updateNotification(formatTime(remaining))
                 }
                 if (remaining <= 0) break
@@ -319,14 +319,14 @@ class EyeCareService : Service() {
         countdownJob = null
     }
 
-    private fun handleAlarmFired() {
+    private suspend fun handleAlarmFired() {
         Log.d(TAG, "ALARM FIRED - Time to rest eyes!")
         _isResting.value = true
         _remainingMs.value = 0
         stopCountdown()
 
         val alertMode = PrefsManager.getAlertMode(this)
-        if (alertMode != "overlay" && alertMode != "overlay_media") {
+        if (alertMode != "overlay") {
             showAlertNotification()
         }
         if (alertMode != "notification" && android.provider.Settings.canDrawOverlays(this)) {
@@ -335,7 +335,7 @@ class EyeCareService : Service() {
             } else {
                 RestOverlayService.start(
                     this,
-                    pauseMedia = alertMode == "overlay_media"
+                    pauseMedia = PrefsManager.isPauseMediaDuringRestEnabled(this)
                 )
             }
         }
@@ -403,13 +403,33 @@ class EyeCareService : Service() {
         return String.format("%02d:%02d remaining", minutes, seconds)
     }
 
-    private fun shouldSkipOverlayForWhitelistedApp(): Boolean {
-        val whitelist = PrefsManager.getOverlayAppWhitelist(this)
-        if (whitelist.isEmpty()) return false
+    private suspend fun shouldSkipOverlayForWhitelistedApp(): Boolean =
+        withContext(Dispatchers.IO) {
+            val whitelist = PrefsManager.getOverlayAppWhitelist(this@EyeCareService)
+            if (whitelist.isEmpty()) return@withContext false
 
-        val foregroundPackage = ForegroundAppUtils.getForegroundPackage(this) ?: return false
-        if (foregroundPackage == packageName) return false
+            if (!ForegroundAppUtils.hasUsageAccess(this@EyeCareService)) {
+                Log.w(TAG, "Usage access is not granted; cannot check the overlay skip list")
+                return@withContext false
+            }
 
-        return whitelist.contains(foregroundPackage)
+            val foregroundPackage =
+                ForegroundAppUtils.getForegroundPackage(this@EyeCareService)
+            if (foregroundPackage == null) {
+                Log.w(TAG, "No foreground app found in recent usage events")
+                return@withContext false
+            }
+            if (foregroundPackage == packageName) return@withContext false
+
+            val shouldSkip = whitelist.contains(foregroundPackage)
+            Log.d(
+                TAG,
+                if (shouldSkip) {
+                    "Skipping overlay for whitelisted package $foregroundPackage"
+                } else {
+                    "Foreground package $foregroundPackage is not in the overlay skip list"
+                }
+            )
+            shouldSkip
     }
 }

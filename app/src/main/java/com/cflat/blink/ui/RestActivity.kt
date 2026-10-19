@@ -53,7 +53,7 @@ class RestActivity : ComponentActivity() {
         val style = PrefsManager.getOverlayStyle(this)
         val themeMode = PrefsManager.getOverlayThemeMode(this)
         val dismissButtonStyle = PrefsManager.getOverlayDismissButtonStyle(this)
-        val pauseMedia = PrefsManager.getAlertMode(this) == "overlay_media"
+        val pauseMedia = PrefsManager.isPauseMediaDuringRestEnabled(this)
 
         setContent {
             val useDarkTheme = when (themeMode) {

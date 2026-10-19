@@ -1,143 +1,195 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Android-14%2B-brightgreen?logo=android&logoColor=white" />
+  <img src="https://img.shields.io/badge/Windows-10%2B-0078D4?logo=windows&logoColor=white" />
   <img src="https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin&logoColor=white" />
-  <img src="https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4?logo=jetpackcompose&logoColor=white" />
+  <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" />
   <img src="https://img.shields.io/github/v/release/character-flat/Blink" />
-  <img src="https://img.shields.io/badge/APK_size-1.76_MB-orange" />
 </p>
 
 # Blink
 
-**A bulletproof 20-20-20 rule timer for Android that actually works.**
+**A reliable 20-20-20 eye-care timer for Android and Windows.**
 
-Blink is a persistent eye-care daemon that reminds you to rest your eyes every 20 minutes. Unlike other timer apps, it uses exact alarms and a foreground service to survive Android's aggressive battery optimizations — your timer fires *on time*, every time, even during Doze mode.
+Blink reminds you to rest your eyes every 20 minutes: look at something 20 feet away for 20 seconds. The Android app is designed to survive Android battery restrictions with exact alarms and a foreground service. The Windows desktop app runs quietly from the system tray and presents the same timer experience in a single executable.
 
-When it's time, a beautiful fullscreen **overlay** appears on top of whatever you're doing (no app switching, no interruptions) and counts down 20 seconds for you to look at something 20 feet away.
+## Platform isolation
 
----
+The two applications are intentionally independent:
 
-## ✨ Features
+- **Android:** [app/](app) is the only Gradle module. Its Kotlin, Compose, manifest, permissions, and APK builds are unaffected by desktop work.
+- **Windows desktop:** [desktop/](desktop) is a standalone Go module built with Fyne. Its settings, timer, system-tray integration, and executable do not depend on the Android app.
 
-### Core
-| Feature | Description |
-|---|---|
-| **Exact Alarms** | Uses `AlarmManager.setExactAndAllowWhileIdle` — fires during deep sleep & Doze |
-| **Foreground Service** | Persistent `specialUse` FGS with live countdown notification |
-| **True Overlay** | `TYPE_APPLICATION_OVERLAY` floats on top of all apps without replacing them |
-| **Smart Screen Detection** | Pauses on screen off, resets after >20s lock, resumes on short locks |
-| **Boot Receiver** | Optional auto-start when device reboots |
-
-### Customization
-| Feature | Description |
-|---|---|
-| **3 Overlay Styles** | **Expressive** (animated rings, ripple waves, orbital dots), **Calm** (smooth arc, gentle glow), **Minimal** (clean progress circle) |
-| **Dynamic M3 Theming** | Colors pulled from your wallpaper via `dynamicColorScheme()` |
-| **Alert Modes** | Choose between: Overlay only, Notification only, or Both |
-| **Adjustable Timers** | Work: 1–60 min, Rest: 10–60 sec |
-| **Overlay Opacity** | 30–100% transparency |
-| **Dismissable Mode** | Optional close button (red FAB) during rest overlay |
-| **Landscape Support** | Responsive layout adapts to orientation |
-
-### Battery & Reliability
-| Feature | Description |
-|---|---|
-| **Shizuku Integration** | Optional — auto-whitelists app from battery optimization via `cmd deviceidle whitelist` |
-| **Battery Optimization** | Built-in toggle to request unrestricted battery access |
-| **START_STICKY** | Service restarts itself if killed by the OS |
-| **Watchdog Alarm** | 5-minute exact alarm verifies service liveness, restarts if dead |
-| **Direct Boot** | Starts on `LOCKED_BOOT_COMPLETED` before device unlock |
-| **OEM Guides** | Per-manufacturer battery settings instructions (Xiaomi, Samsung, OPPO, Vivo, etc.) |
+They share the Blink name and the 20-20-20 concept, but have no shared runtime, configuration, build output, or platform-specific code.
 
 ---
 
-## 📦 Download
-
-**[→ Latest Release](https://github.com/character-flat/Blink/releases/latest)**
+## Features
 
 ### Android
-| Build | Size | Description |
+
+| Area | Feature | Description |
 |---|---|---|
-| `blink-v1.1.0-release.apk` | ~1.8 MB | Signed, R8-minified release build |
-| `blink-v1.1.0-debug.apk` | ~10 MB | Debug build with logging |
+| Reliability | Exact alarms | Uses `AlarmManager.setExactAndAllowWhileIdle` to fire during deep sleep and Doze. |
+| Reliability | Foreground service | Persistent `specialUse` foreground service with a live countdown notification. |
+| Overlay | True overlay | `TYPE_APPLICATION_OVERLAY` appears above other apps without switching context. |
+| Overlay | Three styles | Expressive, Calm, and Minimal rest overlays. |
+| Overlay | Overlay controls | Adjustable opacity, optional dismiss button, and responsive landscape support. |
+| Customization | Alert modes | Overlay only, notification only, or both. |
+| Customization | Adjustable timers | Work duration from 1–60 minutes and rest duration from 10–60 seconds. |
+| Customization | Dynamic Material 3 color | Uses wallpaper-derived colors through `dynamicColorScheme()`. |
+| Power | Battery controls | Optional Shizuku integration, unrestricted-battery guidance, `START_STICKY`, and a watchdog alarm. |
+| Lifecycle | Device handling | Smart screen-lock detection, boot receiver, direct boot, and optional startup after reboot. |
+| Power | OEM guidance | Battery-setting instructions for Xiaomi, Samsung, OPPO, Vivo, and other Android variants. |
 
-### Windows (Desktop)
-| Build | Size | Description |
+### Windows desktop
+
+| Area | Feature | Description |
 |---|---|---|
-| `blink-desktop-windows-amd64.exe` | ~24 MB | Single binary, no installer needed |
+| Timer | 20-20-20 timer | Configurable work duration from 1–60 minutes and rest duration from 5–60 seconds. |
+| Overlay | Fullscreen rest screen | Fullscreen countdown overlay with Expressive, Calm, and Minimal styles. |
+| System integration | System tray | Runs in the notification area, with controls to show the window, start, stop, and quit. |
+| System integration | Single instance | Prevents duplicate timer instances. |
+| System integration | Windows startup | Optional launch at sign-in and start-minimized support. |
+| Notifications | Alert modes | Overlay, native notification, or both, with optional system sound. |
+| Presentation | Timer ring | Segmented progress ring and dark theme designed for comfortable viewing. |
+| Distribution | Single executable | No installer or separate runtime required for the released Windows binary. |
 
-See [desktop/README.md](desktop/README.md) for the desktop-specific docs.
+---
 
-See [CHANGELOG.md](CHANGELOG.md) for release notes.
+## Download
 
-### Requirements (Android)
+[Latest release](https://github.com/character-flat/Blink/releases/latest)
+
+### Android
+
+| Build | Description |
+|---|---|
+| `blink-v1.1.0-release.apk` | Signed, R8-minified release build, approximately 1.8 MB. |
+| `blink-v1.1.0-debug.apk` | Debug build with logging, approximately 10 MB. |
+
+### Windows desktop
+
+| Build | Description |
+|---|---|
+| `blink-desktop-windows-amd64.exe` | Windows 10+ 64-bit single executable, approximately 24 MB. |
+
+See [desktop/README.md](desktop/README.md) for desktop-specific details and [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+---
+
+## Requirements
+
+### Android
+
 - Android 14+ (API 34)
-- **Display over other apps** permission (for the overlay)
+- Display-over-other-apps permission for the overlay
 - Notification permission
 - Exact alarm permission
 
-### Requirements (Desktop)
-- Windows 10+ (64-bit)
+### Windows desktop
+
+- Windows 10 or later, 64-bit
 
 ---
 
-## 🏗️ Architecture
+## Architecture
+
+### Android
 
 ```
-┌─────────────────────────────────────────────────┐
-│  MainActivity (Jetpack Compose / M3)            │
-│  ├── Timer Ring (segmented arc, 60fps)          │
-│  ├── Start/Stop FAB                             │
-│  └── Settings FAB → SettingsScreen              │
-├─────────────────────────────────────────────────┤
-│  EyeCareService (Foreground Service)            │
-│  ├── AlarmManager (exact, idle-safe)            │
-│  ├── BroadcastReceiver (SCREEN_ON/OFF)          │
-│  ├── Countdown coroutine (1s tick)              │
-│  └── Persistent notification (live countdown)   │
-├─────────────────────────────────────────────────┤
-│  RestOverlayService (TYPE_APPLICATION_OVERLAY)  │
-│  ├── ComposeView in WindowManager               │
-│  ├── 3 style composables (Expressive/Calm/Min) │
-│  ├── 60fps raw progress (no animateFloatAsState)│
-│  └── Vibration at start + end                   │
-├─────────────────────────────────────────────────┤
-│  ShizukuUtils → cmd deviceidle whitelist        │
-│  BootReceiver → auto-start on reboot            │
-│  AlarmReceiver → wakes EyeCareService           │
-│  PrefsManager → SharedPreferences wrapper       │
-└─────────────────────────────────────────────────┘
+MainActivity (Jetpack Compose / Material 3)
+  - Timer ring, start/stop controls, and settings
+
+EyeCareService (Foreground Service)
+  - AlarmManager, screen-state receiver, countdown, and notification
+
+RestOverlayService (TYPE_APPLICATION_OVERLAY)
+  - ComposeView, three overlay styles, raw progress animation, and vibration
+
+Supporting components
+  - ShizukuUtils, BootReceiver, AlarmReceiver, and PrefsManager
 ```
 
-### Key Design Decisions
+### Windows desktop
 
-- **No WorkManager** — too imprecise for 20-minute intervals. `AlarmManager.setExactAndAllowWhileIdle` is the only reliable option.
-- **True overlay, not Activity** — `TYPE_APPLICATION_OVERLAY` stays on top without replacing the current app. Activities would force-switch context.
-- **ComposeView in Service** — requires setting all three tree owners (`LifecycleOwner`, `SavedStateRegistryOwner`, `ViewModelStoreOwner`) manually.
-- **Raw 16ms countdown** — `animateFloatAsState` on an already-updating `mutableState` causes jitter. Direct `delay(16)` loop gives smooth ~60fps arc animation.
-- **R8 on debug builds** — `material-icons-extended` is ~30MB unshrinked. R8 tree-shakes unused icons down to <2MB.
+```
+main.go
+  - App lifecycle, command-line startup mode, and system tray
+
+internal/timer
+  - Goroutine-based timer with cancellation-safe lifecycle transitions
+
+internal/ui
+  - Main window, settings window, fullscreen rest overlay, and custom timer rings
+
+internal/config and internal/platform
+  - Per-user JSON settings and Windows-specific startup, sound, opacity, and focus support
+```
 
 ---
 
-## 🔨 Build
+## Key design decisions
+
+### Android
+
+- **Exact scheduling:** `AlarmManager.setExactAndAllowWhileIdle` is used instead of WorkManager because the timer needs predictable 20-minute intervals.
+- **Overlay design:** `TYPE_APPLICATION_OVERLAY` preserves the current app context; launching an activity would force an app switch.
+- **Service-hosted Compose:** The overlay service explicitly provides `LifecycleOwner`, `SavedStateRegistryOwner`, and `ViewModelStoreOwner` for its `ComposeView`.
+- **Smooth countdown:** A direct 16 ms update loop avoids jitter from animating state that is already updated continuously.
+- **Small releases:** R8 removes unused Material icons from the release APK.
+
+### Windows desktop
+
+- **Standalone module:** The Go module in [desktop/](desktop) is intentionally outside the Android Gradle project.
+- **Cancellation-safe timer:** A run identifier prevents a stopped timer worker from entering a later rest cycle.
+- **UI-thread updates:** Background timer and overlay work is marshalled to Fyne's main runtime before changing UI state.
+- **Native integration:** Windows-specific functionality is limited to the desktop platform package for startup, sound, focus, opacity, and the single-instance guard.
+
+---
+
+## Build from source
+
+### Android
 
 ```bash
-# Debug
+# Debug APK
 ./gradlew assembleDebug
 
-# Release (requires signing key)
+# Release APK (requires signing key)
 ./gradlew assembleRelease
 ```
 
-### Tech Stack
+### Windows desktop
 
-- **Language:** Kotlin 2.1
-- **UI:** Jetpack Compose + Material 3 (Dynamic Color)
-- **Min SDK:** 34 (Android 14)
-- **Build:** Gradle 8.9, AGP 8.7.3, Compose BOM 2024.12.01
-- **Dependencies:** Shizuku 13.1.5, Coroutines 1.8.1
+Requirements: Go 1.21+ and a Windows C compiler supported by Fyne, such as MinGW-w64.
+
+```bash
+cd desktop
+
+# Debug build with a console window
+go build -o blink.exe .
+
+# Release build without a console window
+go build -ldflags="-s -w -H windowsgui" -o blink.exe .
+```
+
+### Technology
+
+| Platform | Stack |
+|---|---|
+| Android | Kotlin 2.1, Jetpack Compose, Material 3, Gradle 8.9, Android Gradle Plugin 8.7.3, Shizuku, and Coroutines |
+| Windows desktop | Go, Fyne, Windows APIs, and MinGW-w64 for source builds |
 
 ---
 
-## 📄 License
+## Disclaimer
+
+Blink is a general wellness reminder, not medical advice or a substitute for professional eye-care guidance. It does not diagnose, treat, cure, or prevent any condition. If you have eye discomfort, vision changes, or other health concerns, consult a qualified healthcare professional.
+
+Android and desktop reliability can still be affected by operating-system settings, permissions, battery policies, notification settings, and device or desktop environment behavior. Review the applicable permissions and platform requirements before relying on Blink for scheduled breaks.
+
+---
+
+## License
 
 GNU General Public License v3.
