@@ -1,21 +1,28 @@
 package com.cflat.blink.util
 
 import android.content.Context
+import android.content.ComponentName
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.IBinder
 import android.util.Log
+import com.cflat.blink.shizuku.IShizukuShellService
+import com.cflat.blink.shizuku.ShizukuShellUserService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 object ShizukuUtils {
 
     private const val TAG = "ShizukuUtils"
     private const val SHIZUKU_PERMISSION_CODE = 1001
+    private const val USER_SERVICE_TAG = "deviceidle-whitelist"
+    private const val USER_SERVICE_VERSION = 1
+    private const val USER_SERVICE_PROCESS_SUFFIX = "blink-deviceidle"
 
     private val _shizukuStatus = MutableStateFlow(ShizukuStatus.UNKNOWN)
     val shizukuStatus: StateFlow<ShizukuStatus> = _shizukuStatus.asStateFlow()
@@ -90,24 +97,14 @@ object ShizukuUtils {
         withContext(Dispatchers.IO) {
             try {
                 val packageName = context.packageName
-                val command = "cmd deviceidle whitelist +$packageName"
-
-                val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val output = reader.readText()
-                val exitCode = process.waitFor()
-
-                if (exitCode == 0) {
-                    Log.d(TAG, "Battery whitelist success: $output")
-                    _shizukuStatus.value = ShizukuStatus.WHITELISTED
-                    Result.success(Unit)
-                } else {
-                    val error = BufferedReader(InputStreamReader(process.errorStream)).readText()
-                    Log.e(TAG, "Battery whitelist failed: $error")
-                    Result.failure(RuntimeException("Exit code $exitCode: $error"))
+                val output = withUserService(context) { service ->
+                    service.whitelistPackage(packageName)
                 }
+                Log.d(TAG, "Battery whitelist success: $output")
+                _shizukuStatus.value = ShizukuStatus.WHITELISTED
+                Result.success(Unit)
             } catch (e: Exception) {
-                Log.e(TAG, "Shizuku command failed", e)
+                Log.e(TAG, "Shizuku whitelist command failed", e)
                 Result.failure(e)
             }
         }
@@ -115,17 +112,65 @@ object ShizukuUtils {
     suspend fun checkIfWhitelisted(context: Context): Boolean = withContext(Dispatchers.IO) {
         try {
             val packageName = context.packageName
-            val command = "cmd deviceidle whitelist"
-
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = reader.readText()
-            process.waitFor()
-
+            val output = withUserService(context) { service ->
+                service.listDeviceIdleWhitelist()
+            }
             output.contains(packageName)
         } catch (e: Exception) {
             Log.e(TAG, "Whitelist check failed", e)
             false
+        }
+    }
+
+    private suspend fun withUserService(
+        context: Context,
+        operation: (IShizukuShellService) -> String
+    ): String = suspendCancellableCoroutine { continuation ->
+        val args = Shizuku.UserServiceArgs(
+            ComponentName(context.packageName, ShizukuShellUserService::class.java.name)
+        )
+            .tag(USER_SERVICE_TAG)
+            .version(USER_SERVICE_VERSION)
+            .processNameSuffix(USER_SERVICE_PROCESS_SUFFIX)
+            .daemon(false)
+        var bound = false
+        lateinit var connection: ServiceConnection
+
+        fun unbind() {
+            if (!bound) return
+            bound = false
+            runCatching { Shizuku.unbindUserService(args, connection, true) }
+                .onFailure { Log.w(TAG, "Failed to unbind Shizuku UserService", it) }
+        }
+
+        connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName, service: IBinder) {
+                try {
+                    val shellService = IShizukuShellService.Stub.asInterface(service)
+                    val output = operation(shellService)
+                    if (continuation.isActive) continuation.resumeWith(Result.success(output))
+                } catch (e: Exception) {
+                    if (continuation.isActive) continuation.resumeWith(Result.failure(e))
+                } finally {
+                    unbind()
+                }
+            }
+
+            override fun onServiceDisconnected(name: ComponentName) {
+                if (continuation.isActive) {
+                    continuation.resumeWith(
+                        Result.failure(IllegalStateException("Shizuku UserService disconnected"))
+                    )
+                }
+            }
+        }
+
+        continuation.invokeOnCancellation { unbind() }
+        try {
+            Shizuku.bindUserService(args, connection)
+            bound = true
+        } catch (e: Exception) {
+            if (continuation.isActive) continuation.resumeWith(Result.failure(e))
         }
     }
 }

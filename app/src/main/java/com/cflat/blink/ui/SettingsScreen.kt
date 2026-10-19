@@ -69,6 +69,8 @@ fun SettingsScreen(
     var appSearch by remember { mutableStateOf("") }
     var shizukuMode by remember { mutableStateOf(PrefsManager.isShizukuModeEnabled(context)) }
     var shizukuBusy by remember { mutableStateOf(false) }
+    var shizukuMessage by remember { mutableStateOf<String?>(null) }
+    var shizukuMessageIsError by remember { mutableStateOf(false) }
     val shizukuStatus by ShizukuUtils.shizukuStatus.collectAsStateWithLifecycle()
     var autoStart by remember { mutableStateOf(PrefsManager.isAutoStartEnabled(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -491,6 +493,8 @@ fun SettingsScreen(
                             "Status: ${shizukuStatus.toReadableText()}",
                             style = MaterialTheme.typography.bodyMedium
                         )
+                        val shizukuReady = shizukuStatus == ShizukuUtils.ShizukuStatus.READY ||
+                            shizukuStatus == ShizukuUtils.ShizukuStatus.WHITELISTED
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(
                                 onClick = { ShizukuUtils.requestPermission() },
@@ -498,18 +502,53 @@ fun SettingsScreen(
                             ) { Text("Request Permission") }
                             FilledTonalButton(
                                 onClick = {
-                                    shizukuBusy = true
-                                    scope.launch {
-                                        ShizukuUtils.whitelistFromBatteryOptimization(context)
-                                        delay(400)
-                                        shizukuBusy = false
+                                    shizukuMessage = null
+                                    if (shizukuReady) {
+                                        shizukuBusy = true
+                                        scope.launch {
+                                            val result = ShizukuUtils.whitelistFromBatteryOptimization(context)
+                                            shizukuMessage = result.fold(
+                                                onSuccess = {
+                                                    shizukuMessageIsError = false
+                                                    "Battery optimization whitelist applied."
+                                                },
+                                                onFailure = {
+                                                    shizukuMessageIsError = true
+                                                    "Could not apply whitelist: ${it.message ?: "unknown error"}"
+                                                }
+                                            )
+                                            shizukuBusy = false
+                                        }
+                                    } else {
+                                        val intent = Intent(
+                                            AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                            android.net.Uri.parse("package:${context.packageName}")
+                                        )
+                                        context.startActivity(intent)
+                                        shizukuMessageIsError = false
+                                        shizukuMessage =
+                                            "Shizuku is unavailable. Opened Android's battery optimization request instead."
                                     }
                                 },
-                                enabled = !shizukuBusy && shizukuStatus == ShizukuUtils.ShizukuStatus.READY,
+                                enabled = !shizukuBusy,
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text(if (shizukuBusy) "Applying..." else "Whitelist App")
+                                Text(
+                                    when {
+                                        shizukuBusy -> "Applying..."
+                                        shizukuReady -> "Whitelist App"
+                                        else -> "Use System Fallback"
+                                    }
+                                )
                             }
+                        }
+                        shizukuMessage?.let { message ->
+                            Text(
+                                message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (shizukuMessageIsError) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
