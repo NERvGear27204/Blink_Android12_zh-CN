@@ -6,6 +6,11 @@
   <img src="https://img.shields.io/github/v/release/character-flat/Blink" />
 </p>
 
+# Fork description
+
+I just used AI tools(doubao) to localize the Android version and reduced it to an APK that Android 12 can run on.
+This is a very useful tool, thanks to the original author's development!
+
 # Blink
 
 **A reliable 20-20-20 eye-care timer for Android and Windows.**
