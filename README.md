@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Android-14%2B-brightgreen?logo=android&logoColor=white" />
+  <img src="https://img.shields.io/badge/Android-12%2B-brightgreen?logo=android&logoColor=white" />
   <img src="https://img.shields.io/badge/Windows-10%2B-0078D4?logo=windows&logoColor=white" />
   <img src="https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin&logoColor=white" />
   <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" />
